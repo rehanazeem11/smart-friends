@@ -1,0 +1,58 @@
+{
+  "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/dev/crates/tauri-config-schema/schema.json",
+  "productName": "Smart Friends",
+  "version": "1.0.0",
+  "identifier": "com.smartfriends.billing",
+  "build": {
+  "frontendDist": "../tauri-frontend",
+  "beforeDevCommand": "",
+  "beforeBuildCommand": ""
+},
+  "app": {
+    "windows": [
+      {
+        "title": "Smart Friends · Billing OS",
+        "width": 1400,
+        "height": 900,
+        "resizable": true,
+        "fullscreen": false,
+        "center": true,
+        "minWidth": 800,
+        "minHeight": 600,
+        "url": "http://localhost:5000"
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+  "active": true,
+  "targets": ["nsis", "msi"],
+  "externalBin": ["binaries/node"],
+  "icon": [
+    "icons/32x32.png",
+    "icons/128x128.png",
+    "icons/128x128@2x.png",
+    "icons/icon.ico",
+    "icons/icon.png"
+  ],
+  "resources": [
+  "../server.js",
+  "../models/*",
+  "../.env",
+  "../package.json",
+  "../node_modules/**/*"
+],
+  "windows": {
+    "webviewInstallMode": {
+      "type": "embedBootstrapper"
+    }
+  }
+},
+  "plugins": {
+    "shell": {
+      "open": true
+    }
+  }
+}
