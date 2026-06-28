@@ -4030,12 +4030,6 @@
         const totalPaid = resolvedBills.reduce((s, b) => s + (parseFloat(b.paid) || 0), 0);
         const outstanding = lifetimeBilled - totalPaid;
 
-        const printWindow = window.open('', '_blank');
-        if (!printWindow) {
-            toast('Popup blocked! Please allow popups for printing.', 'alert-circle');
-            return;
-        }
-
         const html = `<!DOCTYPE html>
 <html>
 <head>
@@ -4092,16 +4086,30 @@
         <h3 style="border-bottom: 2px solid #e5e7eb; padding-bottom: 6px; color: #1e3a8a;">Purchase Details</h3>
         ${contentHtml}
     </div>
-    \\x3cscript\\x3e
-        window.onload = function() {
-            window.print();
-        };
-    \\x3c/script\\x3e
 </body>
 </html>`;
 
-        printWindow.document.write(html);
-        printWindow.document.close();
+        const printFrame = document.createElement('iframe');
+        printFrame.style.position = 'fixed';
+        printFrame.style.right = '0';
+        printFrame.style.bottom = '0';
+        printFrame.style.width = '0';
+        printFrame.style.height = '0';
+        printFrame.style.border = '0';
+        document.body.appendChild(printFrame);
+
+        const frameDoc = printFrame.contentWindow.document;
+        frameDoc.open();
+        frameDoc.write(html);
+        frameDoc.close();
+
+        printFrame.onload = function() {
+            setTimeout(function() {
+                printFrame.contentWindow.focus();
+                printFrame.contentWindow.print();
+                setTimeout(function() { document.body.removeChild(printFrame); }, 1000);
+            }, 250);
+        };
     };
 
     window.downloadCustomerHistoryCSV = function() {
@@ -4137,19 +4145,19 @@
             return bill;
         });
 
-        let csvContent = "data:text/csv;charset=utf-8,";
-        csvContent += "Customer History Statement\\n";
-        csvContent += `Customer Name,\${name}\\n`;
-        csvContent += `Phone,\${phone}\\n\\n`;
-        
-        csvContent += "Invoice Number,Date,Status,Item Description,Quantity,Unit,Rate,Line Total,Invoice Total,Invoice Paid,Invoice Due\\n";
-
         const esc = (val) => {
             if (val === null || val === undefined) return '';
             let s = String(val).replace(/"/g, '""');
-            if (s.includes(',') || s.includes('\\n') || s.includes('"')) return `"\${s}"`;
+            if (s.includes(',') || s.includes('\n') || s.includes('"')) return `"${s}"`;
             return s;
         };
+
+        const lines = [];
+        lines.push('Customer History Statement');
+        lines.push('Customer Name,' + esc(name));
+        lines.push('Phone,' + esc(phone));
+        lines.push('');
+        lines.push('Invoice Number,Date,Status,Item Description,Quantity,Unit,Rate,Line Total,Invoice Total,Invoice Paid,Invoice Due');
 
         resolvedBills.forEach(bill => {
             let parsedItems = bill.items || [];
@@ -4158,7 +4166,7 @@
             }
             if (!parsedItems.length) {
                 const totalVal = parseFloat(String(bill.total).replace(/[^0-9.-]+/g,'')) || 0;
-                parsedItems = [{ name: 'Printing Services (Standard)', qty: 1, unit: 'Job', price: totalVal / 1.18, amount: totalVal / 1.18 }];
+                parsedItems = [{ name: 'Printing Services (Standard)', qty: 1, unit: 'Job', price: totalVal / getStoreGstInfo().factor, amount: totalVal / getStoreGstInfo().factor }];
             }
 
             const total = parseFloat(String(bill.total).replace(/[^0-9.-]+/g,'')) || 0;
@@ -4169,24 +4177,43 @@
 
             parsedItems.forEach((item, idx) => {
                 const isFirstRow = idx === 0;
-                const invCol = isFirstRow ? esc(bill.inv) : '';
-                const dateCol = isFirstRow ? esc(dateStr) : '';
-                const statusCol = isFirstRow ? esc(status) : '';
-                const invTotalCol = isFirstRow ? total : '';
-                const invPaidCol = isFirstRow ? paid : '';
-                const invDueCol = isFirstRow ? due : '';
+                const invCol       = isFirstRow ? esc(bill.inv) : '';
+                const dateCol      = isFirstRow ? esc(dateStr) : '';
+                const statusCol    = isFirstRow ? esc(status) : '';
+                const invTotalCol  = isFirstRow ? total.toFixed(2) : '';
+                const invPaidCol   = isFirstRow ? paid.toFixed(2) : '';
+                const invDueCol    = isFirstRow ? due.toFixed(2) : '';
 
-                csvContent += `\${invCol},\\$\${dateCol},\\$\${statusCol},\\$\${esc(item.name)},\${item.qty || 0},\\$\${esc(item.unit || 'pcs')},\${(parseFloat(item.price)||0).toFixed(2)},\${(parseFloat(item.amount)||0).toFixed(2)},\${invTotalCol},\${invPaidCol},\${invDueCol}\\n`;
+                const lineTotal = (parseFloat(item.amount) || 0).toFixed(2);
+                const rate = (parseFloat(item.price) || 0).toFixed(2);
+
+                lines.push([
+                    invCol,
+                    dateCol,
+                    statusCol,
+                    esc(item.name),
+                    item.qty || 0,
+                    esc(item.unit || 'pcs'),
+                    rate,
+                    lineTotal,
+                    invTotalCol,
+                    invPaidCol,
+                    invDueCol
+                ].join(','));
             });
         });
 
-        const encodedUri = encodeURI(csvContent);
-        const link = document.createElement("a");
-        link.setAttribute("href", encodedUri);
-        link.setAttribute("download", `\${name.replace(/\\s+/g, '_')}_history.csv`);
+        const csvString = lines.join('\n');
+
+        const blob = new Blob(['﻿' + csvString], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `${name.replace(/\s+/g, '_')}_history.csv`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
+        URL.revokeObjectURL(url);
         toast('History CSV Downloaded', 'check-circle');
     };
 
@@ -4232,12 +4259,6 @@
         const gstPercentVal = bill.gstPercent !== undefined ? bill.gstPercent : gstInfo.percent;
         const subtotalAmt = parseFloat(bill.subtotal) || (totalAmt / (1 + gstPercentVal / 100));
         const gstAmt = parseFloat(bill.gst) || (totalAmt - subtotalAmt);
-
-        const printWindow = window.open('', '_blank');
-        if (!printWindow) {
-            toast('Popup blocked! Please allow popups for printing.', 'alert-circle');
-            return;
-        }
 
         const html = `<!DOCTYPE html>
 <html>
@@ -4352,16 +4373,30 @@
             Generated by ${bill.createdBy || 'Staff'}
         </div>
     </div>
-    \x3cscript\x3e
-        window.onload = function() {
-            window.print();
-        };
-    \x3c/script\x3e
 </body>
 </html>`;
 
-        printWindow.document.write(html);
-        printWindow.document.close();
+        const printFrame = document.createElement('iframe');
+        printFrame.style.position = 'fixed';
+        printFrame.style.right = '0';
+        printFrame.style.bottom = '0';
+        printFrame.style.width = '0';
+        printFrame.style.height = '0';
+        printFrame.style.border = '0';
+        document.body.appendChild(printFrame);
+
+        const frameDoc = printFrame.contentWindow.document;
+        frameDoc.open();
+        frameDoc.write(html);
+        frameDoc.close();
+
+        printFrame.onload = function() {
+            setTimeout(function() {
+                printFrame.contentWindow.focus();
+                printFrame.contentWindow.print();
+                setTimeout(function() { document.body.removeChild(printFrame); }, 1000);
+            }, 250);
+        };
     };
 
     window.printInvoice = window.printBillByInvoice;
