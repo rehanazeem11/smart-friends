@@ -19,7 +19,7 @@
         "center": true,
         "minWidth": 800,
         "minHeight": 600,
-        "url": "http://localhost:5000"
+        "url": "https://smart-friends.onrender.com"
       }
     ],
     "security": {
@@ -29,7 +29,6 @@
   "bundle": {
   "active": true,
   "targets": ["nsis", "msi"],
-  "externalBin": ["binaries/node"],
   "icon": [
     "icons/32x32.png",
     "icons/128x128.png",
@@ -37,13 +36,6 @@
     "icons/icon.ico",
     "icons/icon.png"
   ],
-  "resources": [
-  "../server.js",
-  "../models/*",
-  "../.env",
-  "../package.json",
-  "../node_modules/**/*"
-],
   "windows": {
     "webviewInstallMode": {
       "type": "embedBootstrapper"

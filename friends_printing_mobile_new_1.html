@@ -344,45 +344,54 @@
                         </div>
                     </div>
 
-                    <!-- Admin stat grid -->
-                    <div class="grid grid-cols-4 gap-4 mb-6 admin-only-view">
+                    <!-- Admin stat grid: 4 cards only -->
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-5 mb-6 admin-only-view">
+                        <!-- 1. Today's Sales -->
                         <div class="stat stat-gold">
                             <div class="flex items-start justify-between">
-                                <div class="stat-label">Today's Revenue</div>
-                                <div class="stat-icon-box"><i data-lucide="trending-up" class="w-5 h-5"
-                                        style="color: var(--gold-strong)"></i></div>
+                                <div class="stat-label">Today's Sales</div>
+                                <div class="stat-icon-box"><i data-lucide="trending-up" class="w-5 h-5" style="color: var(--gold-strong)"></i></div>
                             </div>
                             <div class="stat-value" id="dash-revenue">₹ 0</div>
-                            <div class="text-xs mt-2 font-semibold" style="color: var(--text-muted)" id="dash-revenue-sub"></div>
+                            <div class="text-xs mt-2 font-semibold" style="color: var(--text-muted)" id="dash-revenue-sub">0 paid today</div>
                         </div>
+                        <!-- 2. Today's Bills -->
                         <div class="stat stat-sky">
                             <div class="flex items-start justify-between">
-                                <div class="stat-label">Today's Billed</div>
-                                <div class="stat-icon-box"><i data-lucide="receipt" class="w-5 h-5"
-                                        style="color: var(--sky-text)"></i></div>
+                                <div class="stat-label">Today's Bills</div>
+                                <div class="stat-icon-box"><i data-lucide="receipt" class="w-5 h-5" style="color: var(--sky-text)"></i></div>
                             </div>
-                            <div class="stat-value" id="dash-billed">₹ 0</div>
+                            <div class="stat-value" id="dash-billed">0</div>
                             <div class="text-xs mt-2" style="color: var(--text-muted)" id="dash-billed-sub">0 bills issued</div>
                         </div>
+                        <!-- 3. Outstanding -->
                         <div class="stat stat-rose">
                             <div class="flex items-start justify-between">
                                 <div class="stat-label">Outstanding</div>
-                                <div class="stat-icon-box"><i data-lucide="alert-circle" class="w-5 h-5"
-                                        style="color: var(--rose-text)"></i></div>
+                                <div class="stat-icon-box"><i data-lucide="alert-circle" class="w-5 h-5" style="color: var(--rose-text)"></i></div>
                             </div>
                             <div class="stat-value" id="dash-outstanding">₹ 0</div>
                             <div class="text-xs mt-2" style="color: var(--rose-text)" id="dash-outstanding-sub">0 bills pending</div>
                         </div>
-                        <div class="stat stat-coral">
+                        <!-- 4. Low Stock -->
+                        <div class="stat stat-rose">
                             <div class="flex items-start justify-between">
-                                <div class="stat-label">Orders Today</div>
-                                <div class="stat-icon-box"><i data-lucide="package" class="w-5 h-5"
-                                        style="color: var(--coral-text)"></i></div>
+                                <div class="stat-label">Low Stock</div>
+                                <div class="stat-icon-box"><i data-lucide="archive" class="w-5 h-5" style="color: var(--rose-text)"></i></div>
                             </div>
-                            <div class="stat-value" id="dash-orders">0</div>
-                            <div class="text-xs mt-2" style="color: var(--coral-text)" id="dash-orders-sub">0 orders</div>
+                            <div class="stat-value" id="dash-low-stock-count" style="color: var(--rose-text)">0</div>
+                            <div class="text-xs mt-2" style="color: var(--rose-text)">Items needing restock</div>
                         </div>
+                        <!-- Hidden elements to avoid JS errors (not displayed) -->
+                        <span id="dash-total-sales" style="display:none"></span>
+                        <span id="dash-total-bills" style="display:none"></span>
+                        <span id="dash-customers-count" style="display:none"></span>
+                        <span id="dash-inventory-value" style="display:none"></span>
+                        <span id="dash-profit" style="display:none"></span>
+                        <span id="dash-expenses" style="display:none"></span>
+                        <span id="dash-gst" style="display:none"></span>
                     </div>
+
 
                     <!-- Dashboard widgets grid -->
                     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -662,6 +671,7 @@
                                             <th class="text-left">Description</th>
                                             <th class="text-right">Amount</th>
                                             <th class="text-left">Notes</th>
+                                            <th class="text-center admin-only-view">Action</th>
                                         </tr>
                                     </thead>
                                     <tbody id="expenseTableBody">
@@ -753,10 +763,16 @@
                     </div>
 
                     <div class="card mb-5" style="padding: 18px">
-                        <div class="relative">
-                            <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2"
-                                style="color: var(--text-subtle)"></i>
-                            <input class="input pl-10" placeholder="Search by name, phone number, or GSTIN…" />
+                        <div class="flex flex-col md:flex-row gap-4 items-center justify-between">
+                            <div class="relative flex-1 w-full">
+                                <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2"
+                                    style="color: var(--text-subtle)"></i>
+                                <input class="input pl-10 w-full" id="customer-search-input" placeholder="Search by name, phone number, or GSTIN…" />
+                            </div>
+                            <div class="flex items-center gap-2" style="white-space: nowrap">
+                                <input type="checkbox" id="show-archived-customers" class="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary" style="accent-color: var(--primary)" />
+                                <label for="show-archived-customers" class="text-sm font-semibold select-none cursor-pointer" style="color: var(--text-strong)">Show Archived Customers</label>
+                            </div>
                         </div>
                     </div>
 
@@ -778,12 +794,18 @@
                                 <span id="profileCustomerPhone">+91 98765 43210</span>
                             </p>
                         </div>
-                        <div style="display:flex;gap:10px;flex-shrink:0">
+                        <div style="display:flex;gap:10px;flex-shrink:0" id="profile-action-buttons">
                             <button class="btn btn-accent" id="recordPaymentBtn">
                                 <i data-lucide="wallet" class="w-4 h-4"></i> Record Payment
                             </button>
                             <button class="btn btn-primary" id="profileNewBillBtn">
                                 <i data-lucide="file-plus" class="w-4 h-4"></i> New Bill
+                            </button>
+                            <button class="btn btn-secondary border-rose hover:bg-rose/5" id="profileArchiveBtn" style="color: var(--text-strong)">
+                                <i data-lucide="archive" class="w-4 h-4"></i> Archive
+                            </button>
+                            <button class="btn btn-ghost" id="profileDeleteBtn" style="color: var(--rose); background: rgba(244, 63, 94, 0.08)">
+                                <i data-lucide="trash-2" class="w-4 h-4"></i> Delete
                             </button>
                         </div>
                     </div>
@@ -921,6 +943,7 @@
                                         <th class="text-right">Amount</th>
                                         <th class="text-left">Added By</th>
                                         <th class="text-left">Notes</th>
+                                        <th class="text-center admin-only-view">Action</th>
                                     </tr>
                                 </thead>
                                 <tbody id="rpt-expenses-body">
@@ -1367,16 +1390,24 @@ Bangalore — 560038</textarea>
                                             <div class="font-semibold text-sm">Show GST Breakdown</div>
                                             <div class="text-xs" style="color:var(--text-muted)">Display CGST + SGST lines on invoice</div>
                                         </div>
-                                        <label class="switch"><input type="checkbox" checked /><span class="switch-slider"></span></label>
+                                        <label class="switch"><input type="checkbox" checked /></label>
                                     </div>
                                     <div class="flex items-center justify-between">
                                         <div>
                                             <div class="font-semibold text-sm">Show Bank Details</div>
                                             <div class="text-xs" style="color:var(--text-muted)">Print bank account info on invoice</div>
                                         </div>
-                                        <label class="switch"><input type="checkbox" checked /><span class="switch-slider"></span></label>
+                                        <label class="switch"><input type="checkbox" checked /></label>
                                     </div>
-                                    <button class="btn btn-primary w-full mt-2" onclick="toast('Invoice settings saved')"><i data-lucide="save" class="w-4 h-4"></i> Save Invoice Settings</button>
+                                    <div class="flex items-center justify-between">
+                                        <div>
+                                            <div class="font-semibold text-sm">Show Phone Number on Invoice</div>
+                                            <div class="text-xs" style="color:var(--text-muted)">Print business phone from Company Settings on invoice</div>
+                                        </div>
+                                        <label class="switch"><input type="checkbox" id="inv-show-phone" /><span class="switch-slider"></span></label>
+                                    </div>
+                                    <button class="btn btn-primary w-full mt-2" onclick="saveInvoiceSettings()"><i data-lucide="save" class="w-4 h-4"></i> Save Invoice Settings</button>
+
                                 </div>
                             </div>
                         </div>
