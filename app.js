@@ -2201,7 +2201,7 @@
     };
 
     window.deleteCustomer = async function(id) {
-        const customer = CUSTOMERS.find(c => (c._id || c.id) === id);
+        const customer = CUSTOMERS.find(c => String(c._id || c.id) === String(id));
         if (!customer) return;
 
         const custPhone = (customer.phone || '').replace(/\s/g,'');
@@ -2250,7 +2250,7 @@
     };
 
     window.archiveCustomer = async function(id, archiveState = true) {
-        const customer = CUSTOMERS.find(c => (c._id || c.id) === id);
+        const customer = CUSTOMERS.find(c => String(c._id || c.id) === String(id));
         if (!customer) return;
 
         const actionName = archiveState ? 'Archive' : 'Unarchive';

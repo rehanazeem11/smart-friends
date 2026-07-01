@@ -5,6 +5,7 @@ const customerSchema = new mongoose.Schema({
     phone: String,
     email: String,
     gst: String,
+    archived: { type: Boolean, default: false },
     createdBy: String,
     createdByRole: String,
     createdByEmail: String,
