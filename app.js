@@ -4857,8 +4857,8 @@
                 <td>${statusBadge}</td>
                 <td style="text-align:center">
                     <div class="flex items-center justify-center gap-2">
-                        <button class="btn-ghost p-1.5 rounded" onclick="openEditInventoryItemModal('${item.id}')"><i data-lucide="edit-2" class="w-3.5 h-3.5" style="color: var(--primary)"></i></button>
-                        <button class="btn-ghost p-1.5 rounded" onclick="deleteInventoryItem('${item.id}')"><i data-lucide="trash-2" class="w-3.5 h-3.5" style="color: var(--rose)"></i></button>
+                        <button class="btn-ghost p-1.5 rounded" onclick="openEditInventoryItemModal('${item.id || item._id}')"><i data-lucide="edit-2" class="w-3.5 h-3.5" style="color: var(--primary)"></i></button>
+                        <button class="btn-ghost p-1.5 rounded" onclick="deleteInventoryItem('${item.id || item._id}')"><i data-lucide="trash-2" class="w-3.5 h-3.5" style="color: var(--rose)"></i></button>
                     </div>
                 </td>
             `;
@@ -5033,7 +5033,7 @@
     };
 
     window.openEditInventoryItemModal = function(id) {
-        const item = INVENTORY_ITEMS.find(x => String(x.id) === String(id));
+        const item = INVENTORY_ITEMS.find(x => String(x.id || x._id) === String(id));
         if (!item) return;
         const cats = DROPDOWN_SETTINGS.categories.map(c => `<option value="${c}" ${c===item.category?'selected':''}>${c}</option>`).join('');
         const units = DROPDOWN_SETTINGS.units.map(u => `<option value="${u}" ${u===item.unit?'selected':''}>${u}</option>`).join('');
@@ -5077,7 +5077,7 @@
                         <input class="input font-mono" type="number" step="0.01" id="ei-cost" value="${item.cost}" />
                     </div>
                 </div>
-                <button class="btn btn-primary w-full mt-2" onclick="saveEditInventoryItem('${item.id}')"><i data-lucide="check" class="w-4 h-4"></i> Save Changes</button>
+                <button class="btn btn-primary w-full mt-2" onclick="saveEditInventoryItem('${item.id || item._id}')"><i data-lucide="check" class="w-4 h-4"></i> Save Changes</button>
             </div>
         `);
     };
@@ -5115,7 +5115,7 @@
     };
 
     window.saveEditInventoryItem = function(id) {
-        const item = INVENTORY_ITEMS.find(x => String(x.id) === String(id));
+        const item = INVENTORY_ITEMS.find(x => String(x.id || x._id) === String(id));
         if (!item) return;
         const name = document.getElementById('ei-name')?.value.trim();
         const category = document.getElementById('ei-category')?.value;
@@ -5145,7 +5145,7 @@
     };
 
     window.deleteInventoryItem = function(id) {
-        const idx = INVENTORY_ITEMS.findIndex(x => String(x.id) === String(id));
+        const idx = INVENTORY_ITEMS.findIndex(x => String(x.id || x._id) === String(id));
         if (idx === -1) return;
         const name = INVENTORY_ITEMS[idx].name;
         if (confirm(`Are you sure you want to delete "${name}" from inventory?`)) {
