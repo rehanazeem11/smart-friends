@@ -80,6 +80,13 @@ app.put('/api/customers/:id', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+app.delete('/api/customers/:id', async (req, res) => {
+    try {
+        await Customer.findByIdAndDelete(req.params.id);
+        res.json({ ok: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ============ STAFF ============
 app.get('/api/staff', async (req, res) => {
     try {

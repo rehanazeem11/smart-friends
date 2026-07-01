@@ -1343,7 +1343,7 @@
         );
     };
 
-    function generateReport() {
+    function generateReport(showToast = false) {
         var s = rptStart ? rptStart.value : '';
         var e = rptEnd ? rptEnd.value : '';
         if (!s || !e) { toast('Please select a date range', 'alert-circle'); return; }
@@ -1482,7 +1482,9 @@
 
         generateExpensesReport(startDate, endDate);
 
-        toast('Report generated: ' + fmt(startDate) + ' to ' + fmt(endDate), 'check-circle');
+        if (showToast) {
+            toast('Report generated: ' + fmt(startDate) + ' to ' + fmt(endDate), 'check-circle');
+        }
     }
 
 
@@ -1504,7 +1506,7 @@
     });
 
     document.getElementById('rpt-generate') && document.getElementById('rpt-generate').addEventListener('click', function() {
-        generateReport();
+        generateReport(true);
     });
 
     // wire staff selector to re-run reports
@@ -4855,8 +4857,8 @@
                 <td>${statusBadge}</td>
                 <td style="text-align:center">
                     <div class="flex items-center justify-center gap-2">
-                        <button class="btn-ghost p-1.5 rounded" onclick="openEditInventoryItemModal(${item.id})"><i data-lucide="edit-2" class="w-3.5 h-3.5" style="color: var(--primary)"></i></button>
-                        <button class="btn-ghost p-1.5 rounded" onclick="deleteInventoryItem(${item.id})"><i data-lucide="trash-2" class="w-3.5 h-3.5" style="color: var(--rose)"></i></button>
+                        <button class="btn-ghost p-1.5 rounded" onclick="openEditInventoryItemModal('${item.id}')"><i data-lucide="edit-2" class="w-3.5 h-3.5" style="color: var(--primary)"></i></button>
+                        <button class="btn-ghost p-1.5 rounded" onclick="deleteInventoryItem('${item.id}')"><i data-lucide="trash-2" class="w-3.5 h-3.5" style="color: var(--rose)"></i></button>
                     </div>
                 </td>
             `;
@@ -5031,7 +5033,7 @@
     };
 
     window.openEditInventoryItemModal = function(id) {
-        const item = INVENTORY_ITEMS.find(x => x.id === id);
+        const item = INVENTORY_ITEMS.find(x => String(x.id) === String(id));
         if (!item) return;
         const cats = DROPDOWN_SETTINGS.categories.map(c => `<option value="${c}" ${c===item.category?'selected':''}>${c}</option>`).join('');
         const units = DROPDOWN_SETTINGS.units.map(u => `<option value="${u}" ${u===item.unit?'selected':''}>${u}</option>`).join('');
@@ -5075,7 +5077,7 @@
                         <input class="input font-mono" type="number" step="0.01" id="ei-cost" value="${item.cost}" />
                     </div>
                 </div>
-                <button class="btn btn-primary w-full mt-2" onclick="saveEditInventoryItem(${item.id})"><i data-lucide="check" class="w-4 h-4"></i> Save Changes</button>
+                <button class="btn btn-primary w-full mt-2" onclick="saveEditInventoryItem('${item.id}')"><i data-lucide="check" class="w-4 h-4"></i> Save Changes</button>
             </div>
         `);
     };
@@ -5113,7 +5115,7 @@
     };
 
     window.saveEditInventoryItem = function(id) {
-        const item = INVENTORY_ITEMS.find(x => x.id === id);
+        const item = INVENTORY_ITEMS.find(x => String(x.id) === String(id));
         if (!item) return;
         const name = document.getElementById('ei-name')?.value.trim();
         const category = document.getElementById('ei-category')?.value;
@@ -5132,6 +5134,9 @@
         stampRecord(item, true);
 
         window.saveInventoryData();
+        if (window._serverAvailable) {
+            apiPut('/inventory/' + id, item).catch(function(e) { console.error('Failed to sync inventory update', e); });
+        }
         window.renderInventoryTable();
         window.renderDashboardLowStock();
         document.getElementById('modalOverlay').style.display = 'none';
@@ -5140,7 +5145,7 @@
     };
 
     window.deleteInventoryItem = function(id) {
-        const idx = INVENTORY_ITEMS.findIndex(x => x.id === id);
+        const idx = INVENTORY_ITEMS.findIndex(x => String(x.id) === String(id));
         if (idx === -1) return;
         const name = INVENTORY_ITEMS[idx].name;
         if (confirm(`Are you sure you want to delete "${name}" from inventory?`)) {
@@ -5148,6 +5153,9 @@
             window.saveInventoryData();
             window.renderInventoryTable();
             window.renderDashboardLowStock();
+            if (window._serverAvailable) {
+                fetchJson(API_BASE + '/inventory/' + id, { method: 'DELETE' }).catch(function(e) { console.error('Failed to sync inventory delete', e); });
+            }
             toast(`Deleted "${name}"`, 'check-circle');
             logActivity('Inventory Deleted', 'Deleted <strong>' + name + '</strong> from inventory');
         }
