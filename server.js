@@ -40,7 +40,7 @@ app.post('/api/bills', async (req, res) => {
 
 app.put('/api/bills/:inv', async (req, res) => {
     try {
-        const bill = await Bill.findOneAndUpdate({ inv: req.params.inv }, req.body, { new: true });
+        const bill = await Bill.findOneAndUpdate({ inv: req.params.inv }, req.body, { returnDocument: 'after' });
         if (!bill) return res.status(404).json({ error: 'Bill not found' });
         res.json(bill);
     } catch (e) { res.status(500).json({ error: e.message }); }
@@ -75,7 +75,7 @@ app.post('/api/customers', async (req, res) => {
 
 app.put('/api/customers/:id', async (req, res) => {
     try {
-        const customer = await Customer.findByIdAndUpdate(req.params.id, req.body, { new: true });
+        const customer = await Customer.findByIdAndUpdate(req.params.id, req.body, { returnDocument: 'after' });
         res.json(customer);
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -104,7 +104,7 @@ app.post('/api/staff', async (req, res) => {
 
 app.put('/api/staff/:id', async (req, res) => {
     try {
-        const staff = await Staff.findByIdAndUpdate(req.params.id, req.body, { new: true });
+        const staff = await Staff.findByIdAndUpdate(req.params.id, req.body, { returnDocument: 'after' });
         res.json(staff);
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -151,7 +151,7 @@ app.post('/api/inventory', async (req, res) => {
 
 app.put('/api/inventory/:id', async (req, res) => {
     try {
-        const item = await Inventory.findByIdAndUpdate(req.params.id, req.body, { new: true });
+        const item = await Inventory.findByIdAndUpdate(req.params.id, req.body, { returnDocument: 'after' });
         if (!item) return res.status(404).json({ error: 'Not found' });
         const obj = item.toObject();
         obj.id = obj._id;
@@ -194,7 +194,7 @@ app.put('/api/settings/:key', async (req, res) => {
         const doc = await Settings.findOneAndUpdate(
             { key: req.params.key },
             { key: req.params.key, value: req.body.value },
-            { upsert: true, new: true }
+            { upsert: true, returnDocument: 'after' }
         );
         res.json(doc.value);
     } catch (e) { res.status(500).json({ error: e.message }); }
