@@ -962,6 +962,17 @@
             border-collapse: collapse;
         }
 
+        /* Keep the description column from being squeezed when neighboring
+           auto-growing inputs (qty/rate) get wide — overflow to the right
+           and let the table's scroll wrapper handle it instead. */
+        #lineItemsContainer .li-name {
+            min-width: 180px;
+            flex-shrink: 0;
+        }
+        #lineItemsContainer .li-category {
+            flex-shrink: 0;
+        }
+
         .data-table th {
             text-align: left;
             padding: 14px 18px;
@@ -1469,3 +1480,13 @@
             .grid.grid-cols-4 { grid-template-columns: repeat(2, 1fr) !important; }
             .card { padding: 14px !important; }
         }
+
+/* Compact Input styles for GST Billing Item Table */
+#gstLineItemsTable .input,
+#gstLineItemsTable .select {
+    padding: 6px 8px !important;
+    font-size: 12px !important;
+    border-radius: 6px !important;
+    height: 32px !important;
+    text-align: inherit;
+}

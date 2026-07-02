@@ -175,6 +175,10 @@ const LOGO_BASE64 = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUND
         const mNav = document.querySelector(`.mobile-nav-item[data-page="${pageId}"]`);
         if (mNav) mNav.classList.add('active');
         
+        if (pageId === 'reports' && typeof generateReport === 'function') {
+            generateReport();
+        }
+        
         window.scrollTo(0,0);
     }
     document.querySelectorAll('.nav-item').forEach(item => {
@@ -304,11 +308,34 @@ const LOGO_BASE64 = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUND
     function calculateLineItemAmount(name, qty, price, unit) {
         const area = parseDimensionArea(name);
         const normalizedUnit = String(unit).trim().toLowerCase();
-        const isAreaProduct = area > 0 && (normalizedUnit === '' || normalizedUnit.includes('sq'));
+        // Area products must explicitly have a unit containing 'sq' (e.g. sqft, sq, sqin)
+        const isAreaProduct = area > 0 && normalizedUnit.includes('sq');
         if (isAreaProduct) {
             return qty * area * price;
         }
         return qty * price;
+    }
+
+    function makeInputAutoGrow(input, padding = 24, minWidth = 60) {
+        if (!input) return;
+        const canvas = makeInputAutoGrow._canvas || (makeInputAutoGrow._canvas = document.createElement('canvas'));
+        const ctx = canvas.getContext('2d');
+        const updateWidth = () => {
+            const val = input.value || '';
+            const placeholder = input.placeholder || '';
+            const text = val.toString().length >= placeholder.length ? val.toString() : placeholder;
+            const style = getComputedStyle(input);
+            ctx.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+            const textWidth = ctx.measureText(text || ' ').width;
+            const chrome = style.boxSizing === 'border-box'
+                ? parseFloat(style.paddingLeft) + parseFloat(style.paddingRight) + parseFloat(style.borderLeftWidth) + parseFloat(style.borderRightWidth)
+                : 0;
+            const targetWidth = Math.max(minWidth, textWidth + chrome + padding);
+            input.style.width = targetWidth + 'px';
+        };
+        input.addEventListener('input', updateWidth);
+        input.addEventListener('change', updateWidth);
+        updateWidth();
     }
 
     function applyShortcutData(row) {
@@ -321,7 +348,10 @@ const LOGO_BASE64 = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUND
             nameEl.value = item.desc;
         }
         const priceEl = row.querySelector('.li-price');
-        if (priceEl) priceEl.value = item.price.toFixed(2);
+        if (priceEl) {
+            priceEl.value = item.price.toFixed(2);
+            priceEl.dispatchEvent(new Event('input'));
+        }
         const unitEl = row.querySelector('.li-unit');
         if (unitEl) {
             const area = parseDimensionArea(nameEl.value);
@@ -330,6 +360,7 @@ const LOGO_BASE64 = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUND
             } else {
                 unitEl.value = item.unit;
             }
+            unitEl.dispatchEvent(new Event('input'));
         }
     }
 
@@ -835,8 +866,16 @@ const LOGO_BASE64 = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUND
         const nameEl = row.querySelector('.li-name');
         const qtyEl = row.querySelector('.li-qty');
         const priceEl = row.querySelector('.li-price');
+        const unitEl = row.querySelector('.li-unit');
         const deleteBtn = row.querySelector('.li-del-btn');
         const catEl = row.querySelector('.li-category');
+
+        if (typeof makeInputAutoGrow === 'function') {
+            makeInputAutoGrow(nameEl, 24, 150);
+            makeInputAutoGrow(qtyEl, 24, 70);
+            makeInputAutoGrow(priceEl, 24, 80);
+            makeInputAutoGrow(unitEl, 24, 70);
+        }
 
         if (nameEl) {
             nameEl.addEventListener('input', () => {
@@ -858,6 +897,17 @@ const LOGO_BASE64 = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUND
             });
         }
         if (priceEl) priceEl.addEventListener('input', () => { recalcRow(row); recalcSummary(); });
+        if (unitEl) {
+            unitEl.addEventListener('input', () => {
+                recalcRow(row);
+                recalcSummary();
+            });
+            unitEl.addEventListener('keydown', function(e) {
+                if (e.key === 'Tab' || e.key === 'Enter') {
+                    addNewRowIfNeeded(row);
+                }
+            });
+        }
         if (deleteBtn) deleteBtn.addEventListener('click', () => {
             row.remove();
             updateLineItemNumbers();
@@ -872,17 +922,6 @@ const LOGO_BASE64 = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUND
                 } else {
                     recalcRow(row);
                     recalcSummary();
-                }
-            });
-        }
-
-        // Auto-advance: when Tab or Enter is pressed on the last field of the
-        // LAST row, automatically append a new blank row (Tally-style entry).
-        const unitEl = row.querySelector('.li-unit');
-        if (unitEl) {
-            unitEl.addEventListener('keydown', function(e) {
-                if (e.key === 'Tab' || e.key === 'Enter') {
-                    addNewRowIfNeeded(row);
                 }
             });
         }
@@ -980,7 +1019,12 @@ const LOGO_BASE64 = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUND
             return { total: cash + online, cash, online };
         }
         const paid = parseFloat(document.getElementById('paidInput')?.value) || 0;
-        return { total: paid, cash: 0, online: 0 };
+        const singleModeType = document.getElementById('singlePaymentModeSelect')?.value || 'cash';
+        if (singleModeType === 'online') {
+            return { total: paid, cash: 0, online: paid };
+        } else {
+            return { total: paid, cash: paid, online: 0 };
+        }
     }
 
     function updatePaymentAllocation(total, paid, cash, online) {
@@ -989,7 +1033,7 @@ const LOGO_BASE64 = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUND
         if (!allocationText || !allocationDetail) return;
         if (paid === total) {
             allocationText.textContent = 'Fully allocated';
-            allocationDetail.textContent = getPaymentMode() === 'split' ? `Cash ${formatMoney(cash)} · Online ${formatMoney(online)}` : `All ${formatMoney(paid)}`;
+            allocationDetail.textContent = getPaymentMode() === 'split' ? `Cash ${formatMoney(cash)} · Online ${formatMoney(online)}` : (online > 0 ? `Online ${formatMoney(online)}` : `Cash ${formatMoney(cash)}`);
         } else if (paid < total) {
             allocationText.textContent = 'Pending';
             allocationDetail.textContent = `Due ${formatMoney(total - paid)}`;
@@ -1008,9 +1052,10 @@ const LOGO_BASE64 = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUND
     }));
     updatePaymentModeFields();
 
-    ['discountInput','gstInput','paidInput','cashPaidInput','onlinePaidInput'].forEach(id => {
+    ['discountInput','gstInput','paidInput','cashPaidInput','onlinePaidInput','singlePaymentModeSelect'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.addEventListener('input', recalcSummary);
+        if (el && el.tagName === 'SELECT') el.addEventListener('change', recalcSummary);
     });
 
     // Make static line items recalculate too
@@ -1430,7 +1475,6 @@ const LOGO_BASE64 = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUND
 
         filtered.forEach(function(b) {
             var billGst = Number(b.gst) || 0;
-            var c = classifyBillItems(b);
             var dateKey = (b.date || '').split('T')[0];
 
             var statusLower = (b.status || '').toLowerCase();
@@ -1439,6 +1483,37 @@ const LOGO_BASE64 = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUND
                 : statusLower.includes('partial')
                     ? '<span class="badge badge-partial">Partial</span>'
                     : '<span class="badge badge-outstanding">Outstanding</span>';
+
+            const isGstBill = b.type === 'GST' || b.type === 'gst' || b.buyerGSTIN || b.consigneeGSTIN || (Number(b.gst) > 0 && (b.buyerCompany || b.gstin || b.gstNumber));
+            if (isGstBill) {
+                var billTotal = Number(b.total) || 0;
+                var taxableAmt = Number(b.subtotal) || (billTotal - billGst);
+                var cgst = 0, sgst = 0;
+                // Determine if intrastate or interstate
+                const isIntrastate = (b.buyerStateCode || '36') === '36';
+                if (isIntrastate) {
+                    cgst = billGst / 2;
+                    sgst = billGst / 2;
+                } else {
+                    cgst = 0;
+                    sgst = 0;
+                }
+                var gstin = b.buyerGSTIN || b.gstin || b.gstNumber || '—';
+                gstRows.push('<tr>'
+                    + '<td class="font-mono font-bold" style="color:var(--primary)">' + b.inv + '</td>'
+                    + '<td style="color:var(--text-muted)">' + formatShortDate(b.date) + '</td>'
+                    + '<td class="font-semibold">' + (b.buyerCompany || b.customer || '') + '</td>'
+                    + '<td class="font-mono">' + gstin + '</td>'
+                    + '<td class="tabular" style="text-align:right">₹ ' + taxableAmt.toLocaleString('en-IN') + '</td>'
+                    + '<td class="tabular" style="text-align:right">₹ ' + cgst.toLocaleString('en-IN') + '</td>'
+                    + '<td class="tabular" style="text-align:right">₹ ' + sgst.toLocaleString('en-IN') + '</td>'
+                    + '<td class="tabular font-bold" style="text-align:right;color:var(--primary)">₹ ' + billGst.toLocaleString('en-IN') + '</td>'
+                    + '</tr>');
+                gBillsCount++; gTaxable += taxableAmt; gTax += billGst;
+                return; // Early return: do not count in Counter or Normal Sales!
+            }
+
+            var c = classifyBillItems(b);
 
             if (c.counterAmt > 0) {
                 counterDaily[dateKey] = (counterDaily[dateKey] || 0) + Math.round(c.counterFull);
@@ -2269,8 +2344,8 @@ const LOGO_BASE64 = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUND
         });
         const outstanding = bills.reduce((sum, bill) => sum + Math.max(0, (parseFloat(bill.total) || 0) - (parseFloat(bill.paid) || 0)), 0);
 
-        if (bills.length > 0 || outstanding > 0) {
-            if (confirm(`Cannot delete "${customer.name}" because bills, ledger, or outstanding balances exist.\n\nWould you like to ARCHIVE this customer instead?`)) {
+        if (outstanding > 0) {
+            if (confirm(`Cannot delete "${customer.name}" because outstanding balances exist.\n\nWould you like to ARCHIVE this customer instead?`)) {
                 window.archiveCustomer(id, true);
             }
             return;
@@ -2325,7 +2400,19 @@ const LOGO_BASE64 = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUND
         renderCustomerGrid();
         logActivity(`Customer ${archiveState ? 'Archived' : 'Unarchived'}`, `Marked customer <strong>${customer.name}</strong> as ${archiveState ? 'archived' : 'active'}`);
         toast(`Customer ${archiveState ? 'archived' : 'unarchived'}`, 'check-circle');
-        goto('customers');
+        
+        // Refresh customer profile if open to ensure sync
+        if (currentCustomerData && (currentCustomerData.name || '').toLowerCase() === (customer.name || '').toLowerCase()) {
+            const cards = Array.from(document.querySelectorAll('#customer-grid .customer-card'));
+            const card = cards.find(c => (c.dataset.cname || '').toLowerCase() === (customer.name || '').toLowerCase());
+            if (card) {
+                openCustomerProfile(card);
+            }
+        }
+        
+        if (archiveState) {
+            goto('customers');
+        }
     };
 
     window.deleteExpense = async function(id) {
@@ -2935,6 +3022,11 @@ const LOGO_BASE64 = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUND
         // Close any open modal first
         if (typeof closeModal === 'function') closeModal();
 
+        if (liveBill.type === 'GST') {
+            window.openEditGstBill(invId);
+            return;
+        }
+
         // Navigate to billing page
         goto('new-bill');
 
@@ -3181,6 +3273,7 @@ const LOGO_BASE64 = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUND
         // Load settings and inventory data
         if (typeof loadShortcutItems === 'function') loadShortcutItems();
         if (typeof loadDropdownSettings === 'function') loadDropdownSettings();
+        if (typeof updateGstUnitsDatalist === 'function') updateGstUnitsDatalist();
         if (typeof loadInventoryData === 'function') loadInventoryData();
         if (typeof renderDashboardRecentBills === 'function') renderDashboardRecentBills(); if (typeof updateDashboardStats === 'function') updateDashboardStats();
         if (typeof renderInventoryTable === 'function') renderInventoryTable();
@@ -3664,12 +3757,17 @@ const LOGO_BASE64 = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUND
         document.getElementById('modalOverlay').style.display = 'none';
     };
 
-    function syncBillPayment(inv, newPaid, newStatus) {
+    async function syncBillPayment(inv, newPaid, newStatus) {
         // Update global BILLS array
         const globalBill = BILLS.find(b => b.inv === inv);
         if (globalBill) {
             globalBill.paid = newPaid;
             globalBill.status = newStatus;
+            try {
+                await updateBillOnServer(inv, globalBill);
+            } catch(e) {
+                console.error('syncBillPayment: server update failed for ' + inv, e);
+            }
         }
         // Update Bills tab table row
         updateBillRowInTable(inv, newPaid, newStatus);
@@ -3686,6 +3784,11 @@ const LOGO_BASE64 = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUND
         }
         // Update customer card outstanding
         renderCustomerGrid();
+        
+        // Refresh dashboard and report metrics in real-time
+        if (typeof updateDashboardStats === 'function') updateDashboardStats();
+        if (typeof renderDashboardRecentBills === 'function') renderDashboardRecentBills();
+        if (typeof renderReportsFromBills === 'function') renderReportsFromBills();
     }
 
     function updateBillRowInTable(inv, newPaid, newStatus) {
@@ -3696,8 +3799,8 @@ const LOGO_BASE64 = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUND
                 row.dataset.paid = newPaid;
                 row.dataset.status = newStatus;
                 const cells = row.querySelectorAll('td');
-                if (cells[6]) cells[6].innerHTML = `₹ ${newPaid.toLocaleString('en-IN')}`;
-                if (cells[7]) cells[7].innerHTML = getBadgeHtml(newStatus);
+                if (cells[5]) cells[5].innerHTML = `₹ ${newPaid.toLocaleString('en-IN')}`;
+                if (cells[6]) cells[6].innerHTML = getBadgeHtml(newStatus);
             }
         });
     }
@@ -3853,14 +3956,23 @@ const LOGO_BASE64 = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUND
         currentCustomerCard = card;
         const name = card.dataset.cname;
         const phone = card.dataset.cphone;
-        let bills = [];
-        try { bills = JSON.parse(card.dataset.cbills || '[]'); } catch(e) {}
-        const liveBills = BILLS.filter(b => (b.customer || '').toLowerCase() === (name || '').toLowerCase());
-        liveBills.forEach(lb => {
-            if (!bills.find(cb => cb.inv === lb.inv)) {
-                bills.push({ inv: lb.inv, date: lb.date, dateDisplay: formatShortDate(lb.date), total: lb.total, paid: lb.paid, status: lb.status });
-            }
-        });
+        
+        // Load customer bills directly from global BILLS array to ensure real-time status and sync
+        const custPhone = (phone || '').replace(/\s/g,'');
+        const bills = BILLS.filter(b => {
+            if ((b.customer || '').toLowerCase() !== (name || '').toLowerCase()) return false;
+            if (custPhone && b.phone) return b.phone.replace(/\s/g,'') === custPhone;
+            return true;
+        }).map(b => ({
+            inv: b.inv,
+            date: b.date,
+            dateDisplay: formatShortDate(b.date),
+            total: b.total,
+            paid: b.paid,
+            status: b.status,
+            items: b.items
+        }));
+
         const orders = bills.length;
 
         if (!window.CUSTOMER_PAYMENTS) {
@@ -3928,6 +4040,12 @@ const LOGO_BASE64 = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUND
         
         const outstandingBalanceEl = document.getElementById('profileOutstandingBalance');
         if (outstandingBalanceEl) outstandingBalanceEl.textContent = outstanding > 0 ? '₹ ' + outstanding.toLocaleString('en-IN') : '₹ 0';
+
+        // Hide delete option if there are outstanding balances
+        const deleteBtn = document.getElementById('profileDeleteBtn');
+        if (deleteBtn) {
+            deleteBtn.style.display = outstanding > 0 ? 'none' : '';
+        }
     }
 
     function renderCustomerBills() {
@@ -4072,8 +4190,8 @@ const LOGO_BASE64 = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUND
         `);
     }
 
-    window.confirmPayment = function() {
-        const amount = parseFloat(document.getElementById('modal-pay-amount')?.value) || 0;
+    window.confirmPayment = async function() {
+        const amount = parseFloat(document.getElementById('modal-pay-amount')?.value || 0);
         const date   = document.getElementById('modal-pay-date')?.value || '';
         const notes  = document.getElementById('modal-pay-notes')?.value.trim() || '';
         if (amount <= 0) { toast('Enter a valid payment amount', 'alert-circle'); return; }
@@ -4110,17 +4228,23 @@ const LOGO_BASE64 = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUND
             if (outEl) outEl.textContent = 'Outstanding: ₹ ' + newOutstanding.toLocaleString('en-IN');
         }
 
-        // Sync updated bills back to the global BILLS array and persist
-        currentCustomerData.bills.forEach(cb => {
+        // Sync updated bills back to the global BILLS array, server, and persist
+        for (const cb of currentCustomerData.bills) {
             const globalBill = BILLS.find(gb => gb.inv === cb.inv);
             if (globalBill) {
                 globalBill.paid = cb.paid;
                 globalBill.status = cb.status;
+                try {
+                    await updateBillOnServer(globalBill.inv, globalBill);
+                } catch(e) {
+                    console.error('confirmPayment: failed to sync bill to server', e);
+                }
             }
-        });
+        }
         try { localStorage.setItem('fp_bills_offline', JSON.stringify(BILLS.filter(b => b._offline))); } catch(e) {}
         renderBills();
         renderReportsFromBills();
+        if (typeof updateDashboardStats === 'function') updateDashboardStats();
 
         refreshProfileStats();
         renderCustomerBills();
@@ -5644,6 +5768,7 @@ const LOGO_BASE64 = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUND
         localStorage.setItem('fp_dropdown_settings', JSON.stringify(DROPDOWN_SETTINGS));
         input.value = '';
         window.renderSettingsDropdownLists();
+        if (key === 'units' && typeof window.updateGstUnitsDatalist === 'function') window.updateGstUnitsDatalist();
         toast('Option added successfully', 'check-circle');
     };
 
@@ -5653,6 +5778,7 @@ const LOGO_BASE64 = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUND
             DROPDOWN_SETTINGS[key].splice(idx, 1);
             localStorage.setItem('fp_dropdown_settings', JSON.stringify(DROPDOWN_SETTINGS));
             window.renderSettingsDropdownLists();
+            if (key === 'units' && typeof window.updateGstUnitsDatalist === 'function') window.updateGstUnitsDatalist();
             toast('Option deleted', 'check-circle');
         }
     };
@@ -5778,6 +5904,161 @@ const LOGO_BASE64 = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUND
     ============================================================ */
     ;(function() {
     
+    let EDIT_GST_BILL_ID = null;
+
+    window.openEditGstBill = function(invId) {
+        const bill = BILLS.find(b => b.inv === invId);
+        if (!bill) { toast('GST Bill not found', 'alert-circle'); return; }
+
+        EDIT_GST_BILL_ID = invId;
+
+        // Populate fields
+        const setVal = (id, val) => {
+            const el = document.getElementById(id);
+            if (el) el.value = val !== undefined && val !== null ? val : '';
+        };
+
+        setVal('gstBuyerCompany', bill.buyerCompany || bill.customer);
+        setVal('gstBuyerName', bill.buyerName);
+        setVal('gstBuyerGSTIN', bill.buyerGSTIN);
+        setVal('gstBuyerPAN', bill.buyerPAN);
+        setVal('gstBuyerAddress', bill.buyerAddress);
+        setVal('gstBuyerCity', bill.buyerCity);
+        setVal('gstBuyerPhone', bill.phone);
+        setVal('gstBuyerEmail', bill.buyerEmail);
+
+        // Consignee
+        setVal('gstConsigneeCompany', bill.consigneeCompany);
+        setVal('gstConsigneeGSTIN', bill.consigneeGSTIN);
+        setVal('gstConsigneeAddress', bill.consigneeAddress);
+
+        // State selectors
+        const buyerStateSel = document.getElementById('gstBuyerState');
+        if (buyerStateSel) {
+            buyerStateSel.value = bill.buyerState || '';
+            const code = buyerStateSel.options[buyerStateSel.selectedIndex]?.dataset.code || '00';
+            setVal('gstBuyerStateCode', code);
+        }
+
+        const consigneeStateSel = document.getElementById('gstConsigneeState');
+        if (consigneeStateSel) {
+            consigneeStateSel.value = bill.consigneeState || '';
+            const code = consigneeStateSel.options[consigneeStateSel.selectedIndex]?.dataset.code || '00';
+            setVal('gstConsigneeStateCode', code);
+        }
+
+        // References
+        setVal('gstInvoiceNo', bill.inv);
+        setVal('gstInvoiceDate', bill.date);
+        setVal('gstDueDate', bill.dueDate);
+        setVal('gstPlaceSupply', bill.placeOfSupply);
+        setVal('gstDeliveryNote', bill.deliveryNote);
+        setVal('gstModePayment', bill.modeTermsPayment);
+        setVal('gstRefNo', bill.refNo);
+        setVal('gstOtherReferences', bill.otherReferences);
+        setVal('gstBuyersOrderNo', bill.buyersOrderNo);
+        setVal('gstOrderDate', bill.orderDate);
+        setVal('gstDispatchDocNo', bill.dispatchDocNo);
+        setVal('gstDeliveryNoteDate', bill.deliveryNoteDate);
+        setVal('gstDispatchedThrough', bill.dispatchedThrough);
+        setVal('gstDestination', bill.destination);
+        setVal('gstTermsDelivery', bill.termsOfDelivery);
+        setVal('gstEwayBillNo', bill.eWayBillNo);
+
+        // Radios
+        const setRadio = (name, val) => {
+            const radios = document.getElementsByName(name);
+            radios.forEach(r => {
+                r.checked = r.value === val;
+            });
+        };
+        setRadio('gstReverseCharge', bill.reverseCharge || 'No');
+        setRadio('gstTaxReverseCharge', bill.taxPayableReverseCharge || 'No');
+
+        // Payment
+        const pmSelect = document.getElementById('gstPaymentMethod');
+        if (pmSelect) pmSelect.value = bill.paymentMethod || 'Credit';
+        setVal('gstAmountPaid', bill.paid);
+
+        // Populate table items
+        const container = document.getElementById('gstLineItemsContainer');
+        if (container) {
+            container.innerHTML = '';
+            let items = bill.items || [];
+            if (typeof items === 'string') {
+                try { items = JSON.parse(items); } catch(e) { items = []; }
+            }
+            if (items.length) {
+                items.forEach(item => {
+                    window.addGstRow(item);
+                });
+            } else {
+                window.addGstRow();
+            }
+        }
+
+        // Recalc
+        window.recalcGstInvoice();
+
+        // Show edit banner
+        const editBanner = document.getElementById('gst-edit-mode-banner');
+        if (editBanner) editBanner.style.display = 'flex';
+        const editInvId = document.getElementById('gst-edit-mode-inv-id');
+        if (editInvId) editInvId.textContent = invId;
+
+        // Change button text
+        const submitBtn = document.getElementById('gstSubmitInvoiceBtn');
+        if (submitBtn) {
+            submitBtn.innerHTML = '<i data-lucide="save" class="w-4 h-4"></i> Save Changes';
+            lucide.createIcons({ nodes: [submitBtn] });
+        }
+
+        // Switch tabs to Create GST Invoice
+        const createTabBtn = document.getElementById('gstTabCreateBtn');
+        if (createTabBtn) {
+            createTabBtn.click();
+        }
+
+        // Navigate to GST page
+        goto('gst-billing');
+        toast(`Editing GST Invoice ${invId}`, 'pencil');
+    };
+
+    window.cancelEditGstBill = function() {
+        EDIT_GST_BILL_ID = null;
+
+        // Hide edit banner
+        const editBanner = document.getElementById('gst-edit-mode-banner');
+        if (editBanner) editBanner.style.display = 'none';
+
+        // Restore button text
+        const submitBtn = document.getElementById('gstSubmitInvoiceBtn');
+        if (submitBtn) {
+            submitBtn.innerHTML = '<i data-lucide="file-plus" class="w-4 h-4"></i> Generate GST Invoice';
+            lucide.createIcons({ nodes: [submitBtn] });
+        }
+
+        // Reset form
+        window.resetGstInvoiceForm();
+
+        // Switch to Invoices List
+        const listTabBtn = document.getElementById('gstTabListBtn');
+        if (listTabBtn) {
+            listTabBtn.click();
+        }
+
+        toast('GST Edit cancelled');
+    };
+
+    window.updateGstUnitsDatalist = function() {
+        const dl = document.getElementById('gstUnitsDatalist');
+        if (dl) {
+            dl.innerHTML = DROPDOWN_SETTINGS.units.map(u => {
+                return `<option value="${u}">${u}</option>`;
+            }).join('');
+        }
+    };
+    
     // Tab switching between Create GST Invoice and GST Invoices List
     const tabBtns = document.querySelectorAll('#gst-billing-tabs button');
     tabBtns.forEach(btn => {
@@ -5799,7 +6080,7 @@ const LOGO_BASE64 = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUND
 
     // Populate default dates on load
     function initGstDates() {
-        const today = new Date().toISOString().split('T')[0];
+        const today = typeof localDateStr === 'function' ? localDateStr(new Date()) : new Date().toLocaleDateString('sv-SE');
         const dateInput = document.getElementById('gstInvoiceDate');
         if (dateInput) dateInput.value = today;
         
@@ -5807,7 +6088,7 @@ const LOGO_BASE64 = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUND
         if (dueDateInput) {
             const nextMonth = new Date();
             nextMonth.setDate(nextMonth.getDate() + 30);
-            dueDateInput.value = nextMonth.toISOString().split('T')[0];
+            dueDateInput.value = typeof localDateStr === 'function' ? localDateStr(nextMonth) : nextMonth.toLocaleDateString('sv-SE');
         }
         
         const orderDateInput = document.getElementById('gstOrderDate');
@@ -6023,7 +6304,7 @@ const LOGO_BASE64 = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUND
                 <input class="input w-full text-right font-mono gst-li-qty" type="number" step="any" min="0" placeholder="0.00" value="${qty}" />
             </td>
             <td>
-                <input class="input w-full gst-li-unit" placeholder="Unit" value="${unit}" list="settings-units-list" />
+                <input class="input w-full gst-li-unit" placeholder="Unit" value="${unit}" list="gstUnitsDatalist" autocomplete="off" />
             </td>
             <td>
                 <input class="input w-full text-right font-mono gst-li-rate" type="number" step="0.01" min="0" placeholder="0.00" value="${rate}" />
@@ -6055,6 +6336,17 @@ const LOGO_BASE64 = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUND
         lineContainer.appendChild(row);
         lucide.createIcons({ nodes: [row] });
         
+        // Auto-grow fields for GST inputs
+        if (typeof makeInputAutoGrow === 'function') {
+            makeInputAutoGrow(row.querySelector('.gst-li-name'), 24, 150);
+            makeInputAutoGrow(row.querySelector('.gst-li-desc'), 24, 150);
+            makeInputAutoGrow(row.querySelector('.gst-li-hsn'), 24, 80);
+            makeInputAutoGrow(row.querySelector('.gst-li-qty'), 24, 70);
+            makeInputAutoGrow(row.querySelector('.gst-li-unit'), 24, 70);
+            makeInputAutoGrow(row.querySelector('.gst-li-rate'), 24, 80);
+            makeInputAutoGrow(row.querySelector('.gst-li-disc'), 24, 60);
+        }
+
         // Add event listeners for dynamic recalculation
         const inputs = row.querySelectorAll('input, select');
         inputs.forEach(inp => {
@@ -6067,10 +6359,20 @@ const LOGO_BASE64 = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUND
             const val = e.target.value;
             const shortcut = getShortcutForName(val);
             if (shortcut) {
-                row.querySelector('.gst-li-rate').value = shortcut.price || 0;
-                row.querySelector('.gst-li-unit').value = shortcut.unit || 'Nos';
-                if (shortcut.hsn) row.querySelector('.gst-li-hsn').value = shortcut.hsn;
-                if (shortcut.desc) row.querySelector('.gst-li-name').value = shortcut.desc;
+                const rateEl = row.querySelector('.gst-li-rate');
+                const unitEl = row.querySelector('.gst-li-unit');
+                const hsnEl = row.querySelector('.gst-li-hsn');
+                
+                rateEl.value = shortcut.price || 0;
+                unitEl.value = shortcut.unit || 'Nos';
+                if (shortcut.hsn) hsnEl.value = shortcut.hsn;
+                if (shortcut.desc) nameInput.value = shortcut.desc;
+                
+                // Dispatch events to trigger auto-grow recalculation
+                rateEl.dispatchEvent(new Event('input'));
+                unitEl.dispatchEvent(new Event('input'));
+                if (shortcut.hsn) hsnEl.dispatchEvent(new Event('input'));
+                
                 recalcGstInvoice();
             }
         });
@@ -6384,7 +6686,7 @@ const LOGO_BASE64 = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUND
             const consigneeStateCode = document.getElementById('gstConsigneeStateCode')?.value || '';
             
             // Invoice references
-            const invNum = getNextGstInvoiceNo();
+            const invNum = EDIT_GST_BILL_ID ? EDIT_GST_BILL_ID : getNextGstInvoiceNo();
             const dueDate = document.getElementById('gstDueDate')?.value || '';
             const deliveryNote = document.getElementById('gstDeliveryNote')?.value?.trim() || '';
             const modeTermsPayment = document.getElementById('gstModePayment')?.value?.trim() || '';
@@ -6465,46 +6767,128 @@ const LOGO_BASE64 = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUND
             });
             
             try {
-                // Save to database
-                await saveBillToServer(billObj);
-                
-                // Deduct inventory
-                if (typeof window.deductInventoryFromBill === 'function') {
-                    window.deductInventoryFromBill(items.map(i => ({ name: i.name, qty: i.qty })));
-                    // Force update inventory values and UI
-                    if (window._serverAvailable) {
-                        // Push inventory changes immediately
-                        INVENTORY_ITEMS.forEach(match => {
-                            const bi = items.find(i => (i.name||'').toLowerCase().includes((match.name||'').toLowerCase()));
-                            if (bi) {
-                                apiPut('/inventory/' + (match._id || match.id), match).catch(e => console.error('GST inventory sync error', e));
+                if (EDIT_GST_BILL_ID) {
+                    const originalBill = BILLS.find(b => b.inv === EDIT_GST_BILL_ID);
+                    if (originalBill) {
+                        // Restore original inventory
+                        let origItems = originalBill.items || [];
+                        if (typeof origItems === 'string') {
+                            try { origItems = JSON.parse(origItems); } catch(e) { origItems = []; }
+                        }
+                        origItems.forEach(oi => {
+                            const match = INVENTORY_ITEMS.find(inv => {
+                                const invName = (inv.name || '').toLowerCase();
+                                const invType = (inv.type || '').toLowerCase();
+                                const oiName = (oi.name || '').toLowerCase();
+                                return oiName.includes(invName) || invName.includes(oiName)
+                                    || (invType && (oiName.includes(invType) || invType.includes(oiName)));
+                            });
+                            if (match) {
+                                match.qty = (parseFloat(match.qty) || 0) + (parseFloat(oi.qty) || 0);
                             }
                         });
                     }
+
+                    // Preserve original creation fields
+                    if (originalBill) {
+                        billObj.createdBy = originalBill.createdBy;
+                        billObj.createdAt = originalBill.createdAt;
+                        if (originalBill._id) billObj._id = originalBill._id;
+                        if (originalBill.id) billObj.id = originalBill.id;
+                    }
+
+                    // Save update to server / local storage
+                    await updateBillOnServer(EDIT_GST_BILL_ID, billObj);
+
+                    // Update in-memory BILLS list
+                    const bIdx = BILLS.findIndex(b => b.inv === EDIT_GST_BILL_ID);
+                    if (bIdx >= 0) BILLS[bIdx] = billObj;
+
+                    // Deduct updated inventory
+                    if (typeof window.deductInventoryFromBill === 'function') {
+                        window.deductInventoryFromBill(items.map(i => ({ name: i.name, qty: i.qty })));
+                        if (window._serverAvailable) {
+                            INVENTORY_ITEMS.forEach(match => {
+                                const bi = items.find(i => (i.name||'').toLowerCase().includes((match.name||'').toLowerCase()));
+                                if (bi) {
+                                    apiPut('/inventory/' + (match._id || match.id), match).catch(e => console.error('GST inventory sync error', e));
+                                }
+                            });
+                        }
+                    }
+
+                    // Save offline list to localStorage just in case
+                    try { localStorage.setItem('fp_bills_offline', JSON.stringify(BILLS.filter(b => b._offline))); } catch(e) {}
+
+                    // Refresh all views
+                    refreshAllViews();
+
+                    // Done editing, clean up and reset
+                    const savedInvId = EDIT_GST_BILL_ID;
+                    cancelEditGstBill();
+
+                    // Display confirmation modal with actions
+                    openModal(`
+                        <div class="font-serif text-2xl font-bold mb-1">GST Invoice Updated!</div>
+                        <div class="text-sm mb-5" style="color:var(--text-muted)">GST bill updated and saved successfully.</div>
+                        <div style="background:var(--surface-tint);border:1px solid var(--border);border-radius:14px;padding:18px;margin-bottom:20px">
+                            <div class="flex justify-between mb-2"><span style="color:var(--text-muted)">Invoice #</span><span class="font-mono font-bold" style="color:var(--primary)">${savedInvId}</span></div>
+                            <div class="flex justify-between mb-2"><span style="color:var(--text-muted)">Buyer Company</span><span class="font-semibold">${buyerCompany}</span></div>
+                            <div class="flex justify-between mb-2"><span style="color:var(--text-muted)">GSTIN</span><span class="font-mono">${buyerGSTIN}</span></div>
+                            <div class="flex justify-between mb-2"><span style="color:var(--text-muted)">Date</span><span>${invoiceDate}</span></div>
+                            <div class="flex justify-between mt-3 pt-3 border-t" style="border-color:var(--border)"><span style="color:var(--text-muted)">Grand Total</span><span class="font-serif font-bold text-xl" style="color:var(--primary)">₹ ${grandTotalVal.toLocaleString('en-IN', {minimumFractionDigits:2})}</span></div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2 mb-3">
+                            <button class="btn btn-secondary text-sm" onclick="window.printGstInvoice('${savedInvId}');closeModal()"><i data-lucide="printer" class="w-4 h-4"></i> Print Bill</button>
+                            <button class="btn btn-secondary text-sm" onclick="window.downloadGstInvoicePDF('${savedInvId}');closeModal()"><i data-lucide="download" class="w-4 h-4"></i> Download PDF</button>
+                        </div>
+                        <button class="btn btn-primary w-full" onclick="closeModal()"><i data-lucide="check" class="w-4 h-4"></i> Done</button>
+                    `);
+
+                    toast('GST Bill updated', 'check-circle');
+                    logActivity('GST Bill Updated', `Updated GST Invoice <span class="font-mono font-bold" style="color:var(--primary)">${savedInvId}</span> for ${buyerCompany} · ₹ ${Math.round(grandTotalVal).toLocaleString('en-IN')}`);
+                } else {
+                    // Save to database
+                    await saveBillToServer(billObj);
+                    
+                    // Deduct inventory
+                    if (typeof window.deductInventoryFromBill === 'function') {
+                        window.deductInventoryFromBill(items.map(i => ({ name: i.name, qty: i.qty })));
+                        // Force update inventory values and UI
+                        if (window._serverAvailable) {
+                            // Push inventory changes immediately
+                            INVENTORY_ITEMS.forEach(match => {
+                                const bi = items.find(i => (i.name||'').toLowerCase().includes((match.name||'').toLowerCase()));
+                                if (bi) {
+                                    apiPut('/inventory/' + (match._id || match.id), match).catch(e => console.error('GST inventory sync error', e));
+                                }
+                            });
+                        }
+                    }
+                    
+                    resetGstInvoiceForm();
+                    
+                    // Display confirmation modal with actions
+                    openModal(`
+                        <div class="font-serif text-2xl font-bold mb-1">GST Invoice Generated!</div>
+                        <div class="text-sm mb-5" style="color:var(--text-muted)">GST bill registered and saved successfully.</div>
+                        <div style="background:var(--surface-tint);border:1px solid var(--border);border-radius:14px;padding:18px;margin-bottom:20px">
+                            <div class="flex justify-between mb-2"><span style="color:var(--text-muted)">Invoice #</span><span class="font-mono font-bold" style="color:var(--primary)">${invNum}</span></div>
+                            <div class="flex justify-between mb-2"><span style="color:var(--text-muted)">Buyer Company</span><span class="font-semibold">${buyerCompany}</span></div>
+                            <div class="flex justify-between mb-2"><span style="color:var(--text-muted)">GSTIN</span><span class="font-mono">${buyerGSTIN}</span></div>
+                            <div class="flex justify-between mb-2"><span style="color:var(--text-muted)">Date</span><span>${invoiceDate}</span></div>
+                            <div class="flex justify-between mt-3 pt-3 border-t" style="border-color:var(--border)"><span style="color:var(--text-muted)">Grand Total</span><span class="font-serif font-bold text-xl" style="color:var(--primary)">₹ ${grandTotalVal.toLocaleString('en-IN', {minimumFractionDigits:2})}</span></div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2 mb-3">
+                            <button class="btn btn-secondary text-sm" onclick="window.printGstInvoice('${invNum}');closeModal()"><i data-lucide="printer" class="w-4 h-4"></i> Print Bill</button>
+                            <button class="btn btn-secondary text-sm" onclick="window.downloadGstInvoicePDF('${invNum}');closeModal()"><i data-lucide="download" class="w-4 h-4"></i> Download PDF</button>
+                        </div>
+                        <button class="btn btn-primary w-full" onclick="closeModal()"><i data-lucide="check" class="w-4 h-4"></i> Done</button>
+                    `);
+                    
+                    toast('GST Bill generated and saved', 'check-circle');
+                    logActivity('GST Bill Created', `Generated GST Invoice <span class="font-mono font-bold" style="color:var(--primary)">${invNum}</span> for ${buyerCompany} · ₹ ${Math.round(grandTotalVal).toLocaleString('en-IN')}`);
                 }
-                
-                resetGstInvoiceForm();
-                
-                // Display confirmation modal with actions
-                openModal(`
-                    <div class="font-serif text-2xl font-bold mb-1">GST Invoice Generated!</div>
-                    <div class="text-sm mb-5" style="color:var(--text-muted)">GST bill registered and saved successfully.</div>
-                    <div style="background:var(--surface-tint);border:1px solid var(--border);border-radius:14px;padding:18px;margin-bottom:20px">
-                        <div class="flex justify-between mb-2"><span style="color:var(--text-muted)">Invoice #</span><span class="font-mono font-bold" style="color:var(--primary)">${invNum}</span></div>
-                        <div class="flex justify-between mb-2"><span style="color:var(--text-muted)">Buyer Company</span><span class="font-semibold">${buyerCompany}</span></div>
-                        <div class="flex justify-between mb-2"><span style="color:var(--text-muted)">GSTIN</span><span class="font-mono">${buyerGSTIN}</span></div>
-                        <div class="flex justify-between mb-2"><span style="color:var(--text-muted)">Date</span><span>${invoiceDate}</span></div>
-                        <div class="flex justify-between mt-3 pt-3 border-t" style="border-color:var(--border)"><span style="color:var(--text-muted)">Grand Total</span><span class="font-serif font-bold text-xl" style="color:var(--primary)">₹ ${grandTotalVal.toLocaleString('en-IN', {minimumFractionDigits:2})}</span></div>
-                    </div>
-                    <div class="grid grid-cols-2 gap-2 mb-3">
-                        <button class="btn btn-secondary text-sm" onclick="window.printGstInvoice('${invNum}');closeModal()"><i data-lucide="printer" class="w-4 h-4"></i> Print Bill</button>
-                        <button class="btn btn-secondary text-sm" onclick="window.downloadGstInvoicePDF('${invNum}');closeModal()"><i data-lucide="download" class="w-4 h-4"></i> Download PDF</button>
-                    </div>
-                    <button class="btn btn-primary w-full" onclick="closeModal()"><i data-lucide="check" class="w-4 h-4"></i> Done</button>
-                `);
-                
-                toast('GST Bill generated and saved', 'check-circle');
-                logActivity('GST Bill Created', `Generated GST Invoice <span class="font-mono font-bold" style="color:var(--primary)">${invNum}</span> for ${buyerCompany} · ₹ ${Math.round(grandTotalVal).toLocaleString('en-IN')}`);
                 
             } catch (e) {
                 console.error('saveBillToServer GST failed:', e);
@@ -6725,7 +7109,6 @@ const LOGO_BASE64 = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUND
     document.querySelectorAll('.nav-item[data-page="gst-billing"]').forEach(item => {
         item.addEventListener('click', () => {
             goto('gst-billing');
-            resetGstInvoiceForm();
         });
     });
 
