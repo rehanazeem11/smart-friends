@@ -160,6 +160,9 @@
     <div class="mobile-drawer-overlay" id="mobileDrawerOverlay" onclick="closeMobileDrawer()"></div>
     <div class="mobile-more-drawer" id="mobileMoreDrawer">
         <div class="mobile-drawer-handle"></div>
+        <div class="mobile-drawer-item" onclick="goto('gst-billing');closeMobileDrawer()">
+            <i data-lucide="receipt"></i> GST Billing
+        </div>
         <div class="mobile-drawer-item staff-hidden" onclick="goto('bills');closeMobileDrawer()">
             <i data-lucide="file-text"></i> Bills
         </div>
@@ -208,6 +211,9 @@
                 </div>
                 <div class="nav-item" data-page="new-bill">
                     <i data-lucide="shopping-cart" class="w-[18px] h-[18px]"></i> POS / Billing
+                </div>
+                <div class="nav-item" data-page="gst-billing">
+                    <i data-lucide="receipt" class="w-[18px] h-[18px]"></i> GST Billing
                 </div>
                 <div class="nav-item" data-page="bills">
                     <i data-lucide="file-text" class="w-[18px] h-[18px]"></i> Bills
@@ -413,6 +419,7 @@
                                         <th class="admin-only-view">Created By</th>
                                         <th style="text-align: right">Total</th>
                                         <th>Status</th>
+                                        <th>Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody id="dashboard-recent-tbody">
@@ -446,6 +453,17 @@
                             <p class="page-subtitle">Create a new bill with customer details, shipping, and item totals.</p>
                         </div>
                     </div>
+                    <!-- Edit Mode Banner -->
+                    <div id="edit-mode-banner" style="display:none;background:var(--gold-soft);border:1px solid #ecd99a;border-radius:12px;padding:12px 16px;margin-bottom:16px;align-items:center;gap:10px;color:var(--gold-strong);">
+                        <i data-lucide="pencil" class="w-4 h-4" style="flex-shrink:0"></i>
+                        <div style="flex:1;">
+                            <span class="font-semibold text-sm">Editing Invoice </span>
+                            <span id="edit-mode-inv-id" class="font-mono font-bold text-sm"></span>
+                            <span class="text-xs ml-2" style="color:var(--gold-strong);opacity:0.75">· Original creation date &amp; ID are preserved</span>
+                        </div>
+                        <button onclick="window.cancelEditBill()" class="btn btn-ghost text-xs" style="color:var(--text-muted);border:1px solid var(--border);padding:4px 10px;border-radius:6px;">✕ Cancel</button>
+                    </div>
+
                     <div class="space-y-5">
                         <!-- Customer & Shipping -->
                         <div class="card">
@@ -616,6 +634,429 @@
                             <button class="btn btn-primary w-full py-3 text-base font-bold" id="generateBillBtn">
                                 <i data-lucide="save" class="w-5 h-5"></i> Generate Bill
                             </button>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ============ GST BILLING ============ -->
+                <section class="page" id="page-gst-billing">
+                    <div class="page-header">
+                        <div>
+                            <h1 class="page-title">GST Tax Billing</h1>
+                            <p class="page-subtitle">Create and manage professional accounting-style GST invoices.</p>
+                        </div>
+                    </div>
+
+                    <div class="tab-pills mb-6" id="gst-billing-tabs">
+                        <button class="active" data-gst-tab="create" id="gstTabCreateBtn"><i data-lucide="file-plus" class="w-3.5 h-3.5"></i> Create GST Invoice</button>
+                        <button data-gst-tab="list" id="gstTabListBtn"><i data-lucide="list" class="w-3.5 h-3.5"></i> GST Invoices List</button>
+                    </div>
+
+                    <!-- Panel 1: Create Invoice Form -->
+                    <div id="gst-panel-create" class="space-y-6">
+                        <!-- Buyer & Consignee Row -->
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <!-- Buyer (Bill to) Card -->
+                            <div class="card">
+                                <div class="section-title mb-4 flex justify-between items-center">
+                                    <span>Buyer (Bill to)</span>
+                                    <span class="text-xs text-muted font-normal">* indicates required fields</span>
+                                </div>
+                                <div class="space-y-4">
+                                    <div class="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label class="label mb-1">Company / Business Name <span class="text-rose-500">*</span></label>
+                                            <input class="input font-semibold" id="gstBuyerCompany" placeholder="e.g. Acme Corp" />
+                                        </div>
+                                        <div>
+                                            <label class="label mb-1">Customer / Contact Name <span class="text-rose-500">*</span></label>
+                                            <input class="input" id="gstBuyerName" placeholder="e.g. John Doe" />
+                                        </div>
+                                    </div>
+                                    <div class="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label class="label mb-1">GSTIN/UIN <span class="text-rose-500">*</span></label>
+                                            <input class="input font-mono uppercase" id="gstBuyerGSTIN" placeholder="e.g. 36ACWFS..." max-length="15" />
+                                        </div>
+                                        <div>
+                                            <label class="label mb-1">PAN Number</label>
+                                            <input class="input font-mono uppercase" id="gstBuyerPAN" placeholder="e.g. ACWFS..." max-length="10" />
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label class="label mb-1">Address <span class="text-rose-500">*</span></label>
+                                        <textarea class="input" id="gstBuyerAddress" rows="2" placeholder="Street Address, Area"></textarea>
+                                    </div>
+                                    <div class="grid grid-cols-3 gap-3">
+                                        <div>
+                                            <label class="label mb-1">City <span class="text-rose-500">*</span></label>
+                                            <input class="input" id="gstBuyerCity" placeholder="City" />
+                                        </div>
+                                        <div>
+                                            <label class="label mb-1">State <span class="text-rose-500">*</span></label>
+                                            <select class="select font-semibold" id="gstBuyerState">
+                                                <option value="" disabled selected>Select State</option>
+                                                <option value="Telangana" data-code="36">Telangana (36)</option>
+                                                <option value="Andhra Pradesh" data-code="37">Andhra Pradesh (37)</option>
+                                                <option value="Karnataka" data-code="29">Karnataka (29)</option>
+                                                <option value="Maharashtra" data-code="27">Maharashtra (27)</option>
+                                                <option value="Tamil Nadu" data-code="33">Tamil Nadu (33)</option>
+                                                <option value="Delhi" data-code="07">Delhi (07)</option>
+                                                <option value="Gujarat" data-code="24">Gujarat (24)</option>
+                                                <option value="Haryana" data-code="06">Haryana (06)</option>
+                                                <option value="Kerala" data-code="32">Kerala (32)</option>
+                                                <option value="Rajasthan" data-code="08">Rajasthan (08)</option>
+                                                <option value="Uttar Pradesh" data-code="09">Uttar Pradesh (09)</option>
+                                                <option value="West Bengal" data-code="19">West Bengal (19)</option>
+                                                <option value="Other" data-code="00">Other State</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label class="label mb-1">State Code <span class="text-rose-500">*</span></label>
+                                            <input class="input font-mono text-center" id="gstBuyerStateCode" placeholder="Code" readonly />
+                                        </div>
+                                    </div>
+                                    <div class="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label class="label mb-1">Phone Number <span class="text-rose-500">*</span></label>
+                                            <input class="input font-mono" id="gstBuyerPhone" placeholder="10-digit phone" />
+                                        </div>
+                                        <div>
+                                            <label class="label mb-1">Email Address</label>
+                                            <input class="input" id="gstBuyerEmail" placeholder="buyer@email.com" />
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Consignee (Ship to) Card -->
+                            <div class="card">
+                                <div class="section-title mb-4 flex justify-between items-center">
+                                    <span>Consignee (Ship to)</span>
+                                    <button class="btn btn-secondary py-1 px-3 text-xs flex items-center gap-1 font-semibold" type="button" id="gstCopyBuyerBtn">
+                                        <i data-lucide="copy" class="w-3.5 h-3.5"></i> Copy Buyer Details
+                                    </button>
+                                </div>
+                                <div class="space-y-4">
+                                    <div>
+                                        <label class="label mb-1">Company / Consignee Name</label>
+                                        <input class="input font-semibold" id="gstConsigneeCompany" placeholder="e.g. Acme Warehouse" />
+                                    </div>
+                                    <div>
+                                        <label class="label mb-1">GSTIN/UIN</label>
+                                        <input class="input font-mono uppercase" id="gstConsigneeGSTIN" placeholder="GSTIN/UIN" max-length="15" />
+                                    </div>
+                                    <div>
+                                        <label class="label mb-1">Address</label>
+                                        <textarea class="input" id="gstConsigneeAddress" rows="2" placeholder="Shipping Address"></textarea>
+                                    </div>
+                                    <div class="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label class="label mb-1">State</label>
+                                            <select class="select" id="gstConsigneeState">
+                                                <option value="" disabled selected>Select State</option>
+                                                <option value="Telangana" data-code="36">Telangana (36)</option>
+                                                <option value="Andhra Pradesh" data-code="37">Andhra Pradesh (37)</option>
+                                                <option value="Karnataka" data-code="29">Karnataka (29)</option>
+                                                <option value="Maharashtra" data-code="27">Maharashtra (27)</option>
+                                                <option value="Tamil Nadu" data-code="33">Tamil Nadu (33)</option>
+                                                <option value="Delhi" data-code="07">Delhi (07)</option>
+                                                <option value="Gujarat" data-code="24">Gujarat (24)</option>
+                                                <option value="Haryana" data-code="06">Haryana (06)</option>
+                                                <option value="Kerala" data-code="32">Kerala (32)</option>
+                                                <option value="Rajasthan" data-code="08">Rajasthan (08)</option>
+                                                <option value="Uttar Pradesh" data-code="09">Uttar Pradesh (09)</option>
+                                                <option value="West Bengal" data-code="19">West Bengal (19)</option>
+                                                <option value="Other" data-code="00">Other State</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label class="label mb-1">State Code</label>
+                                            <input class="input font-mono text-center" id="gstConsigneeStateCode" placeholder="Code" readonly />
+                                        </div>
+                                    </div>
+                                    <div style="height:38px"></div> <!-- Spacer to match heights -->
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Invoice Details Card -->
+                        <div class="card">
+                            <div class="section-title mb-4">Invoice & Shipping details</div>
+                            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                <div>
+                                    <label class="label mb-1">Invoice Number</label>
+                                    <input class="input font-mono font-bold" id="gstInvoiceNo" placeholder="Auto Generating..." readonly />
+                                </div>
+                                <div>
+                                    <label class="label mb-1">Invoice Date <span class="text-rose-500">*</span></label>
+                                    <input class="input" type="date" id="gstInvoiceDate" />
+                                </div>
+                                <div>
+                                    <label class="label mb-1">Due Date</label>
+                                    <input class="input" type="date" id="gstDueDate" />
+                                </div>
+                                <div>
+                                    <label class="label mb-1">Place of Supply <span class="text-rose-500">*</span></label>
+                                    <input class="input font-semibold" id="gstPlaceSupply" placeholder="State name (e.g. Telangana)" />
+                                </div>
+                                
+                                <div>
+                                    <label class="label mb-1">Delivery Note</label>
+                                    <input class="input" id="gstDeliveryNote" placeholder="Delivery terms/note" />
+                                </div>
+                                <div>
+                                    <label class="label mb-1">Mode / Terms of Payment</label>
+                                    <input class="input" id="gstModePayment" placeholder="e.g. Cash / Bank / 30 Days" />
+                                </div>
+                                <div>
+                                    <label class="label mb-1">Reference No. & Date</label>
+                                    <input class="input" id="gstRefNo" placeholder="Ref no & Date" />
+                                </div>
+                                <div>
+                                    <label class="label mb-1">Other References</label>
+                                    <input class="input" id="gstOtherReferences" placeholder="Other reference info" />
+                                </div>
+                                
+                                <div>
+                                    <label class="label mb-1">Buyer’s Order No.</label>
+                                    <input class="input" id="gstBuyersOrderNo" placeholder="Order No." />
+                                </div>
+                                <div>
+                                    <label class="label mb-1">Order Date</label>
+                                    <input class="input" type="date" id="gstOrderDate" />
+                                </div>
+                                <div>
+                                    <label class="label mb-1">Dispatch Doc No.</label>
+                                    <input class="input font-mono" id="gstDispatchDocNo" placeholder="Doc No." />
+                                </div>
+                                <div>
+                                    <label class="label mb-1">Delivery Note Date</label>
+                                    <input class="input" type="date" id="gstDeliveryNoteDate" />
+                                </div>
+
+                                <div>
+                                    <label class="label mb-1">Dispatched Through</label>
+                                    <input class="input" id="gstDispatchedThrough" placeholder="e.g. Road / Porter" />
+                                </div>
+                                <div>
+                                    <label class="label mb-1">Destination</label>
+                                    <input class="input" id="gstDestination" placeholder="e.g. Hyderabad" />
+                                </div>
+                                <div>
+                                    <label class="label mb-1">Terms of Delivery</label>
+                                    <input class="input" id="gstTermsDelivery" placeholder="Terms of delivery info" />
+                                </div>
+                                <div>
+                                    <label class="label mb-1">e-Way Bill No.</label>
+                                    <input class="input font-mono" id="gstEwayBillNo" placeholder="12-digit e-Way Bill" />
+                                </div>
+                            </div>
+                            
+                            <div class="grid grid-cols-2 gap-4 mt-4 pt-3 border-t" style="border-color: var(--border)">
+                                <div class="flex items-center gap-6">
+                                    <label class="label mb-0">Reverse Charge Applicable:</label>
+                                    <div class="flex items-center gap-4">
+                                        <label class="flex items-center gap-1.5 cursor-pointer text-sm font-semibold">
+                                            <input type="radio" name="gstReverseCharge" value="Yes" /> Yes
+                                        </label>
+                                        <label class="flex items-center gap-1.5 cursor-pointer text-sm font-semibold">
+                                            <input type="radio" name="gstReverseCharge" value="No" checked /> No
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="flex items-center gap-6">
+                                    <label class="label mb-0">Tax Payable on Reverse Charge Basis:</label>
+                                    <div class="flex items-center gap-4">
+                                        <label class="flex items-center gap-1.5 cursor-pointer text-sm font-semibold">
+                                            <input type="radio" name="gstTaxReverseCharge" value="Yes" /> Yes
+                                        </label>
+                                        <label class="flex items-center gap-1.5 cursor-pointer text-sm font-semibold">
+                                            <input type="radio" name="gstTaxReverseCharge" value="No" checked /> No
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Product Table Card -->
+                        <div class="card">
+                            <div class="flex items-center justify-between mb-4">
+                                <div>
+                                    <div class="font-serif text-xl font-bold">Billing Items (GST)</div>
+                                    <div class="text-sm mt-0.5" style="color: var(--text-muted)">Type a shortcut name to auto-fill. Taxes calculated dynamically based on states.</div>
+                                </div>
+                                <button class="btn btn-accent text-sm" type="button" id="gstAddItemBtn">
+                                    <i data-lucide="plus" class="w-4 h-4"></i> Add Item
+                                </button>
+                            </div>
+
+                            <div class="overflow-x-auto">
+                                <table class="data-table w-full text-xs" style="min-width:1150px" id="gstLineItemsTable">
+                                    <thead>
+                                        <tr>
+                                            <th style="width: 40px;" class="text-center">Sl</th>
+                                            <th style="width: 250px;">Description of Goods / Services</th>
+                                            <th style="width: 140px;">Print Note</th>
+                                            <th style="width: 80px;" class="text-center">HSN/SAC</th>
+                                            <th style="width: 80px;" class="text-right">Quantity</th>
+                                            <th style="width: 70px;">Unit</th>
+                                            <th style="width: 100px;" class="text-right">Rate</th>
+                                            <th style="width: 70px;" class="text-right">Disc (%)</th>
+                                            <th style="width: 100px;" class="text-right">Taxable Val</th>
+                                            <th style="width: 80px;" class="text-center">GST %</th>
+                                            <th style="width: 80px;" class="text-right gst-cgst-sgst-header">CGST</th>
+                                            <th style="width: 80px;" class="text-right gst-cgst-sgst-header">SGST</th>
+                                            <th style="width: 80px;" class="text-right gst-igst-header hidden">IGST</th>
+                                            <th style="width: 110px;" class="text-right">Amount</th>
+                                            <th style="width: 40px;"></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="gstLineItemsContainer">
+                                        <!-- Dynamic items rows -->
+                                    </tbody>
+                                    <tfoot>
+                                        <tr class="font-bold border-t" style="border-color: var(--border-strong); background: var(--surface-tint)">
+                                            <td colspan="4" class="text-right py-2 px-3">Total:</td>
+                                            <td id="gstTotalQty" class="text-right py-2 px-3">0.00</td>
+                                            <td></td>
+                                            <td></td>
+                                            <td></td>
+                                            <td id="gstTotalTaxable" class="text-right py-2 px-3">₹ 0.00</td>
+                                            <td></td>
+                                            <td id="gstTotalCGST" class="text-right py-2 px-3 gst-cgst-sgst-footer">₹ 0.00</td>
+                                            <td id="gstTotalSGST" class="text-right py-2 px-3 gst-cgst-sgst-footer">₹ 0.00</td>
+                                            <td id="gstTotalIGST" class="text-right py-2 px-3 gst-igst-footer hidden">₹ 0.00</td>
+                                            <td id="gstGrandTotal" class="text-right py-2 px-3 font-serif" style="color:var(--primary)">₹ 0.00</td>
+                                            <td></td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Calculations Summary, Words, Action -->
+                        <div class="card">
+                            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                                <div>
+                                    <div class="space-y-4">
+                                        <div class="p-4 rounded-xl border" style="background:var(--bg-tint);border-color:var(--border)">
+                                            <div class="text-xs font-bold uppercase tracking-widest mb-1.5" style="color:var(--text-muted)">Amount Chargeable (in words)</div>
+                                            <div class="text-sm font-semibold" style="color:var(--primary)" id="gstWordsAmount">Zero Rupees Only</div>
+                                        </div>
+                                        <div class="p-4 rounded-xl border" style="background:var(--bg-tint);border-color:var(--border)">
+                                            <div class="text-xs font-bold uppercase tracking-widest mb-1.5" style="color:var(--text-muted)">Tax Amount (in words)</div>
+                                            <div class="text-sm font-semibold" style="color:var(--primary)" id="gstWordsTax">Zero Rupees Only</div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="mt-6">
+                                        <label class="label mb-1.5">Payment Details / Status</label>
+                                        <div class="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <label class="label text-xs">Amount Paid (₹)</label>
+                                                <input class="input font-mono tabular" type="number" step="0.01" value="0" id="gstAmountPaid" />
+                                            </div>
+                                            <div>
+                                                <label class="label text-xs">Payment Method</label>
+                                                <select class="select" id="gstPaymentMethod">
+                                                    <option value="Cash">Cash</option>
+                                                    <option value="Online">Online / GPay / PhonePe</option>
+                                                    <option value="Bank Transfer">Bank Transfer</option>
+                                                    <option value="Split">Split Payment</option>
+                                                    <option value="Credit" selected>On Account / Credit</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Tax Summary Table -->
+                                <div class="flex flex-col justify-between">
+                                    <div class="p-4 rounded-xl border" style="background:var(--surface-tint);border-color:var(--border)">
+                                        <div class="text-xs font-bold uppercase tracking-widest mb-3" style="color:var(--text-muted)">HSN/SAC Tax summary</div>
+                                        <table class="w-full text-[10px] text-left border-collapse">
+                                            <thead>
+                                                <tr class="border-b" style="border-color:var(--border)">
+                                                    <th class="py-1">HSN/SAC</th>
+                                                    <th class="py-1 text-right">Taxable Val</th>
+                                                    <th class="py-1 text-right">CGST</th>
+                                                    <th class="py-1 text-right">SGST</th>
+                                                    <th class="py-1 text-right">IGST</th>
+                                                    <th class="py-1 text-right">Total Tax</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="gstTaxSummaryBody">
+                                                <tr>
+                                                    <td colspan="6" class="text-center py-2 text-muted">No items added</td>
+                                                </tr>
+                                            </tbody>
+                                            <tfoot>
+                                                <tr class="font-bold border-t" style="border-color:var(--border)">
+                                                    <td class="py-1.5">Total</td>
+                                                    <td class="py-1.5 text-right" id="gstSummaryTaxableTotal">₹ 0.00</td>
+                                                    <td class="py-1.5 text-right" id="gstSummaryCGSTTotal">₹ 0.00</td>
+                                                    <td class="py-1.5 text-right" id="gstSummarySGSTTotal">₹ 0.00</td>
+                                                    <td class="py-1.5 text-right" id="gstSummaryIGSTTotal">₹ 0.00</td>
+                                                    <td class="py-1.5 text-right font-serif" style="color:var(--primary)" id="gstSummaryTaxTotal">₹ 0.00</td>
+                                                </tr>
+                                            </tfoot>
+                                        </table>
+                                    </div>
+
+                                    <div class="mt-6 flex gap-4">
+                                        <button class="btn btn-secondary flex-1 py-3" type="button" id="gstResetFormBtn">
+                                            <i data-lucide="rotate-ccw" class="w-4 h-4"></i> Reset Form
+                                        </button>
+                                        <button class="btn btn-primary flex-1 py-3 text-base font-bold" type="button" id="gstSubmitInvoiceBtn">
+                                            <i data-lucide="save" class="w-5 h-5"></i> Generate GST Invoice
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Panel 2: GST Invoices List -->
+                    <div id="gst-panel-list" class="space-y-5" style="display:none">
+                        <div class="card p-4">
+                            <div class="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
+                                <div class="col-span-2 relative">
+                                    <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2" style="color: var(--text-subtle)"></i>
+                                    <input class="input pl-10" id="gstInvoiceSearch" placeholder="Search by Invoice #, Buyer Company, Customer..." />
+                                </div>
+                                <div>
+                                    <label class="label text-xs">Start Date</label>
+                                    <input class="input" type="date" id="gstListStart" />
+                                </div>
+                                <div>
+                                    <label class="label text-xs">End Date</label>
+                                    <input class="input" type="date" id="gstListEnd" />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card p-0 overflow-hidden">
+                            <table class="data-table w-full">
+                                <thead>
+                                    <tr>
+                                        <th>Invoice #</th>
+                                        <th>Date</th>
+                                        <th>Buyer Company</th>
+                                        <th class="text-right">Taxable Amt</th>
+                                        <th class="text-right">GST Amt</th>
+                                        <th class="text-right">Grand Total</th>
+                                        <th class="text-right">Paid</th>
+                                        <th>Status</th>
+                                        <th class="text-center">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="gstInvoicesListBody">
+                                    <tr>
+                                        <td colspan="9" class="text-center py-4 text-muted">No GST Invoices found.</td>
+                                    </tr>
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                 </section>
@@ -853,6 +1294,7 @@
                                             <th style="text-align:right">Paid</th>
                                             <th style="text-align:right">Due</th>
                                             <th>Status</th>
+                                            <th>Actions</th>
                                         </tr>
                                     </thead>
                                     <tbody id="profileBillsTable"></tbody>
@@ -1501,7 +1943,7 @@ Bangalore — 560038</textarea>
     <!-- Toast notification -->
     <div id="toast" style="display:none;position:fixed;bottom:28px;right:28px;z-index:2000;background:var(--brand-bg);color:white;padding:14px 22px;border-radius:14px;font-size:14px;font-weight:600;box-shadow:0 8px 24px rgba(0,0,0,0.2);align-items:center;gap:10px;opacity:0;transition:opacity 0.25s"></div>
 
-    <script src="app.js"></script>
+    <script src="app.js?v=3"></script>
 </body>
 
 </html>
