@@ -498,7 +498,7 @@ const LOGO_BASE64 = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUND
             panel.innerHTML = `
                 <div class="grid grid-cols-2 gap-2 text-[11px] mb-2">
                     <div>
-                        <label class="block text-[10px] text-gray-500 font-semibold mb-0.5" style="color:var(--text-muted)">Paper Type</label>
+                        <label class="block text-[10px] text-gray-500 font-semibold mb-0.5" style="color:var(--text-muted)">Sheet Type</label>
                         <select class="select select-xs w-full li-pjc-type" style="height: 24px; font-size: 11px; padding: 0 4px; border: 1px solid var(--border); border-radius: 6px; background:var(--surface);">
                             ${typesOpts}
                         </select>
@@ -511,33 +511,6 @@ const LOGO_BASE64 = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUND
                         </select>
                     </div>
                 </div>
-                <div class="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[11px] border-t border-dashed border-slate-200 pt-2 mt-2">
-                    <div class="flex items-center gap-1">
-                        <span class="text-[10px] text-gray-400 font-semibold">Lamination:</span>
-                        <select class="select select-xs li-pjc-lamination" style="height: 20px; font-size: 10px; padding: 0 2px; border: 1px solid var(--border); border-radius: 4px; background:var(--surface);">
-                            <option value="none">None</option>
-                            <option value="gloss">Gloss</option>
-                            <option value="matte">Matte</option>
-                        </select>
-                    </div>
-                    <div class="flex items-center gap-1">
-                        <span class="text-[10px] text-gray-400 font-semibold">Cutting:</span>
-                        <select class="select select-xs li-pjc-cutting" style="height: 20px; font-size: 10px; padding: 0 2px; border: 1px solid var(--border); border-radius: 4px; background:var(--surface);">
-                            <option value="none">None</option>
-                            <option value="normal">Normal</option>
-                            <option value="half">Half</option>
-                            <option value="full_shape">Full Shape</option>
-                        </select>
-                    </div>
-                    <label class="flex items-center gap-1 cursor-pointer select-none">
-                        <input type="checkbox" class="li-pjc-creasing w-3.5 h-3.5 rounded border-gray-300 text-primary focus:ring-primary" />
-                        <span class="text-[10px] text-gray-600 font-medium">Crease</span>
-                    </label>
-                    <label class="flex items-center gap-1 cursor-pointer select-none">
-                        <input type="checkbox" class="li-pjc-perforation w-3.5 h-3.5 rounded border-gray-300 text-primary focus:ring-primary" />
-                        <span class="text-[10px] text-gray-600 font-medium">Perf</span>
-                    </label>
-                </div>
             `;
         } else if (cat === 'sticker') {
             const typesOpts = PRICING_DB.sticker.types.map(t => `<option value="${t.key}">${t.label}</option>`).join('');
@@ -549,33 +522,6 @@ const LOGO_BASE64 = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUND
                             ${typesOpts}
                         </select>
                     </div>
-                </div>
-                <div class="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[11px] border-t border-dashed border-slate-200 pt-2 mt-2">
-                    <div class="flex items-center gap-1">
-                        <span class="text-[10px] text-gray-400 font-semibold">Lamination:</span>
-                        <select class="select select-xs li-pjc-lamination" style="height: 20px; font-size: 10px; padding: 0 2px; border: 1px solid var(--border); border-radius: 4px; background:var(--surface);">
-                            <option value="none">None</option>
-                            <option value="gloss">Gloss</option>
-                            <option value="matte">Matte</option>
-                        </select>
-                    </div>
-                    <div class="flex items-center gap-1">
-                        <span class="text-[10px] text-gray-400 font-semibold">Cutting:</span>
-                        <select class="select select-xs li-pjc-cutting" style="height: 20px; font-size: 10px; padding: 0 2px; border: 1px solid var(--border); border-radius: 4px; background:var(--surface);">
-                            <option value="none">None</option>
-                            <option value="normal">Normal</option>
-                            <option value="half">Half</option>
-                            <option value="full_shape">Full Shape</option>
-                        </select>
-                    </div>
-                    <label class="flex items-center gap-1 cursor-pointer select-none">
-                        <input type="checkbox" class="li-pjc-creasing w-3.5 h-3.5 rounded border-gray-300 text-primary focus:ring-primary" />
-                        <span class="text-[10px] text-gray-600 font-medium">Crease</span>
-                    </label>
-                    <label class="flex items-center gap-1 cursor-pointer select-none">
-                        <input type="checkbox" class="li-pjc-perforation w-3.5 h-3.5 rounded border-gray-300 text-primary focus:ring-primary" />
-                        <span class="text-[10px] text-gray-600 font-medium">Perf</span>
-                    </label>
                 </div>
             `;
         } else if (cat === 'flex') {
@@ -607,32 +553,37 @@ const LOGO_BASE64 = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUND
                         </select>
                     </div>
                 </div>
-                <div class="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[11px] border-t border-dashed border-slate-200 pt-2 mt-2">
-                    <div class="flex items-center gap-1">
-                        <span class="text-[10px] text-gray-400 font-semibold">Lamination:</span>
-                        <select class="select select-xs li-pjc-lamination" style="height: 20px; font-size: 10px; padding: 0 2px; border: 1px solid var(--border); border-radius: 4px; background:var(--surface);">
-                            <option value="none">None</option>
+            `;
+        } else if (cat === 'lamination') {
+            panel.innerHTML = `
+                <div class="grid grid-cols-2 gap-2 text-[11px] mb-2">
+                    <div>
+                        <label class="block text-[10px] text-gray-500 font-semibold mb-0.5" style="color:var(--text-muted)">Lamination Type</label>
+                        <select class="select select-xs w-full li-pjc-type" style="height: 24px; font-size: 11px; padding: 0 4px; border: 1px solid var(--border); border-radius: 6px; background:var(--surface);">
                             <option value="gloss">Gloss</option>
                             <option value="matte">Matte</option>
                         </select>
                     </div>
-                    <div class="flex items-center gap-1">
-                        <span class="text-[10px] text-gray-400 font-semibold">Cutting:</span>
-                        <select class="select select-xs li-pjc-cutting" style="height: 20px; font-size: 10px; padding: 0 2px; border: 1px solid var(--border); border-radius: 4px; background:var(--surface);">
-                            <option value="none">None</option>
+                    <div>
+                        <label class="block text-[10px] text-gray-500 font-semibold mb-0.5" style="color:var(--text-muted)">Print Side</label>
+                        <select class="select select-xs w-full li-pjc-side" style="height: 24px; font-size: 11px; padding: 0 4px; border: 1px solid var(--border); border-radius: 6px; background:var(--surface);">
+                            <option value="os">O/S — One Side</option>
+                            <option value="fb">F/B — Both Sides</option>
+                        </select>
+                    </div>
+                </div>
+            `;
+        } else if (cat === 'cutting') {
+            panel.innerHTML = `
+                <div class="grid grid-cols-2 gap-2 text-[11px] mb-2">
+                    <div class="col-span-2">
+                        <label class="block text-[10px] text-gray-500 font-semibold mb-0.5" style="color:var(--text-muted)">Cutting Type</label>
+                        <select class="select select-xs w-full li-pjc-type" style="height: 24px; font-size: 11px; padding: 0 4px; border: 1px solid var(--border); border-radius: 6px; background:var(--surface);">
                             <option value="normal">Normal</option>
                             <option value="half">Half</option>
                             <option value="full_shape">Full Shape</option>
                         </select>
                     </div>
-                    <label class="flex items-center gap-1 cursor-pointer select-none">
-                        <input type="checkbox" class="li-pjc-creasing w-3.5 h-3.5 rounded border-gray-300 text-primary focus:ring-primary" />
-                        <span class="text-[10px] text-gray-600 font-medium">Crease</span>
-                    </label>
-                    <label class="flex items-center gap-1 cursor-pointer select-none">
-                        <input type="checkbox" class="li-pjc-perforation w-3.5 h-3.5 rounded border-gray-300 text-primary focus:ring-primary" />
-                        <span class="text-[10px] text-gray-600 font-medium">Perf</span>
-                    </label>
                 </div>
             `;
         }
@@ -657,111 +608,47 @@ const LOGO_BASE64 = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUND
         const unitEl = row.querySelector('.li-unit');
         
         if (!cat) return;
-        
+
         const typeKey = row.querySelector('.li-pjc-type')?.value;
         const side = row.querySelector('.li-pjc-side')?.value || 'os';
-        const lamKey = row.querySelector('.li-pjc-lamination')?.value || 'none';
-        const cutKey = row.querySelector('.li-pjc-cutting')?.value || 'none';
-        const hasCreasing = row.querySelector('.li-pjc-creasing')?.checked || false;
-        const hasPerforation = row.querySelector('.li-pjc-perforation')?.checked || false;
-        
+
         let totalCost = 0;
         let descriptionText = '';
         let unitText = 'sheet';
         let sqft = 0;
-        
+
         if (cat === 'paper') {
             const typeObj = PRICING_DB.paper.types.find(t => t.key === typeKey);
             if (!typeObj) return;
-            
+
             const rate = side === 'os' ? typeObj.os : typeObj.fb;
             const sideLabel = side === 'os' ? 'O/S' : 'F/B';
-            descriptionText = `Paper: ${typeObj.label} (${sideLabel})`;
+            descriptionText = `Sheet: ${typeObj.label} (${sideLabel})`;
             unitText = 'sheet';
-            
+
             totalCost += qty * rate;
-            
-            if (lamKey !== 'none') {
-                const lam = PRICING_DB.lamination[lamKey];
-                const perSh = side === 'os' ? lam.perSheetOS : lam.perSheetFB;
-                const lamRaw = qty * perSh;
-                const lamChg = Math.max(lamRaw, lam.min);
-                totalCost += lamChg;
-                descriptionText += ` + ${lamKey === 'gloss' ? 'Gloss' : 'Matte'} Lam`;
-            }
-            if (cutKey !== 'none') {
-                const cut = PRICING_DB.cutting[cutKey];
-                const cutRaw = qty * cut.perSheet;
-                const cutChg = Math.max(cutRaw, cut.min);
-                totalCost += cutChg;
-                descriptionText += ` + ${cutKey === 'normal' ? 'Normal' : cutKey === 'half' ? 'Half' : 'Shape'} Cut`;
-            }
-            if (hasCreasing) {
-                const cs = PRICING_DB.additionalServices.creasing;
-                const csRaw = qty * cs.perSheet;
-                const csChg = Math.max(csRaw, cs.min);
-                totalCost += csChg;
-                descriptionText += ' + Crease';
-            }
-            if (hasPerforation) {
-                const pf = PRICING_DB.additionalServices.perforation;
-                const pfRaw = qty * pf.perSheet;
-                const pfChg = Math.max(pfRaw, pf.min);
-                totalCost += pfChg;
-                descriptionText += ' + Perf';
-            }
-            
+
         } else if (cat === 'sticker') {
             const typeObj = PRICING_DB.sticker.types.find(t => t.key === typeKey);
             if (!typeObj) return;
-            
+
             const rate = typeObj.rate;
             descriptionText = `Sticker: ${typeObj.label}`;
             unitText = 'sheet';
-            
+
             totalCost += qty * rate;
-            
-            if (lamKey !== 'none') {
-                const lam = PRICING_DB.lamination[lamKey];
-                const perSh = side === 'os' ? lam.perSheetOS : lam.perSheetFB;
-                const lamRaw = qty * perSh;
-                const lamChg = Math.max(lamRaw, lam.min);
-                totalCost += lamChg;
-                descriptionText += ` + ${lamKey === 'gloss' ? 'Gloss' : 'Matte'} Lam`;
-            }
-            if (cutKey !== 'none') {
-                const cut = PRICING_DB.cutting[cutKey];
-                const cutRaw = qty * cut.perSheet;
-                const cutChg = Math.max(cutRaw, cut.min);
-                totalCost += cutChg;
-                descriptionText += ` + ${cutKey === 'normal' ? 'Normal' : cutKey === 'half' ? 'Half' : 'Shape'} Cut`;
-            }
-            if (hasCreasing) {
-                const cs = PRICING_DB.additionalServices.creasing;
-                const csRaw = qty * cs.perSheet;
-                const csChg = Math.max(csRaw, cs.min);
-                totalCost += csChg;
-                descriptionText += ' + Crease';
-            }
-            if (hasPerforation) {
-                const pf = PRICING_DB.additionalServices.perforation;
-                const pfRaw = qty * pf.perSheet;
-                const pfChg = Math.max(pfRaw, pf.min);
-                totalCost += pfChg;
-                descriptionText += ' + Perf';
-            }
-            
+
         } else if (cat === 'flex') {
             const typeObj = PRICING_DB.flex.types.find(t => t.key === typeKey);
             if (!typeObj) return;
-            
+
             const rate = typeObj.rate;
             const w = parseFloat(row.querySelector('.li-pjc-w')?.value) || 0;
             const h = parseFloat(row.querySelector('.li-pjc-h')?.value) || 0;
             const unit = row.querySelector('.li-pjc-unit')?.value || 'ft';
-            
+
             sqft = getRowAreaSqFt(w, h, unit);
-            
+
             let w_ft = w;
             let h_ft = h;
             if (unit === 'in') {
@@ -773,49 +660,41 @@ const LOGO_BASE64 = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUND
             }
             const w_ft_str = Number(w_ft.toFixed(2));
             const h_ft_str = Number(h_ft.toFixed(2));
-            
+
             let dimStr = `${w_ft_str}x${h_ft_str} ft`;
             if (unit !== 'ft') {
                 dimStr = `${w_ft_str}x${h_ft_str} ft (${w}x${h} ${unit})`;
             }
-            
+
             descriptionText = `Flex: ${typeObj.label} ${dimStr}`;
             unitText = 'sqft';
-            
+
             const printCost = qty * sqft * rate;
             totalCost += printCost;
-            
-            if (lamKey !== 'none') {
-                const lam = PRICING_DB.lamination[lamKey];
-                const totalSqft = sqft * qty;
-                const lamRaw = totalSqft * lam.perSheetOS;
-                const lamChg = Math.max(lamRaw, lam.min);
-                totalCost += lamChg;
-                descriptionText += ` + ${lamKey === 'gloss' ? 'Gloss' : 'Matte'} Lam`;
-            }
-            if (cutKey !== 'none') {
-                const cut = PRICING_DB.cutting[cutKey];
-                const cutRaw = qty * cut.perSheet;
-                const cutChg = Math.max(cutRaw, cut.min);
-                totalCost += cutChg;
-                descriptionText += ` + ${cutKey === 'normal' ? 'Normal' : cutKey === 'half' ? 'Half' : 'Shape'} Cut`;
-            }
-            if (hasCreasing) {
-                const cs = PRICING_DB.additionalServices.creasing;
-                const csRaw = qty * cs.perSheet;
-                const csChg = Math.max(csRaw, cs.min);
-                totalCost += csChg;
-                descriptionText += ' + Crease';
-            }
-            if (hasPerforation) {
-                const pf = PRICING_DB.additionalServices.perforation;
-                const pfRaw = qty * pf.perSheet;
-                const pfChg = Math.max(pfRaw, pf.min);
-                totalCost += pfChg;
-                descriptionText += ' + Perf';
-            }
+
+        } else if (cat === 'lamination') {
+            const lam = PRICING_DB.lamination[typeKey];
+            if (!lam) return;
+
+            const perSh = side === 'os' ? lam.perSheetOS : lam.perSheetFB;
+            const sideLabel = side === 'os' ? 'O/S' : 'F/B';
+            descriptionText = `Lamination: ${typeKey === 'gloss' ? 'Gloss' : 'Matte'} (${sideLabel})`;
+            unitText = 'sheet';
+
+            const raw = qty * perSh;
+            totalCost += Math.max(raw, lam.min);
+
+        } else if (cat === 'cutting') {
+            const cut = PRICING_DB.cutting[typeKey];
+            if (!cut) return;
+
+            descriptionText = `Cutting: ${typeKey === 'normal' ? 'Normal' : typeKey === 'half' ? 'Half' : 'Full Shape'}`;
+            unitText = 'sheet';
+
+            const raw = qty * cut.perSheet;
+            totalCost += Math.max(raw, cut.min);
         }
-        
+
         if (nameEl) nameEl.value = descriptionText;
         if (unitEl) unitEl.value = unitText;
         
@@ -831,9 +710,13 @@ const LOGO_BASE64 = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUND
         recalcSummary();
     }
 
-    function buildLineItemRow(name='', qty=1, price=0, unit='') {
+    function buildLineItemRow(name='', qty='', price='', unit='') {
         const row = document.createElement('tr');
         row.className = 'li-row';
+        const qtyNum = parseFloat(qty) || 0;
+        const priceNum = parseFloat(price) || 0;
+        const qtyVal = (qty === '' || qty === null || qty === undefined) ? '' : qty;
+        const priceVal = (price === '' || price === null || price === undefined) ? '' : Number(price).toFixed(2);
         row.innerHTML = `
             <td class="text-center li-sino"></td>
             <td>
@@ -841,19 +724,21 @@ const LOGO_BASE64 = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUND
                     <div class="flex gap-1.5 items-center">
                         <select class="select select-sm li-category" style="width: 100px; height: 38px; font-size: 13px; padding: 2px 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface);">
                             <option value="">Custom</option>
-                            <option value="paper">Paper</option>
+                            <option value="paper">Sheet</option>
                             <option value="sticker">Sticker</option>
                             <option value="flex">Flex</option>
+                            <option value="lamination">Lamination</option>
+                            <option value="cutting">Cutting</option>
                         </select>
                         <input class="input w-full li-name" list="billingItemShortcuts" placeholder="Description of Goods" value="${name}" />
                     </div>
                     <div class="li-config-panel p-2 bg-slate-50 border border-slate-200 rounded-md text-xs" style="display:none;"></div>
                 </div>
             </td>
-            <td><input class="input w-full text-center tabular li-qty" type="number" min="0" value="${qty}" /></td>
-            <td><input class="input w-full text-right tabular li-price" type="number" min="0" step="0.01" value="${price.toFixed(2)}" /></td>
+            <td><input class="input w-full text-center tabular li-qty" type="number" min="0" value="${qtyVal}" /></td>
+            <td><input class="input w-full text-right tabular li-price" type="number" min="0" step="0.01" value="${priceVal}" /></td>
             <td><input class="input w-full li-unit" placeholder="Per" value="${unit}" /></td>
-            <td class="text-right font-bold tabular font-serif text-lg li-amount">₹ ${(qty*price).toLocaleString('en-IN')}</td>
+            <td class="text-right font-bold tabular font-serif text-lg li-amount">₹ ${(qtyNum*priceNum).toLocaleString('en-IN')}</td>
             <td class="text-right"><button class="btn btn-ghost p-1.5 rounded li-del-btn"><i data-lucide="trash-2" class="w-4 h-4"></i></button></td>
         `;
 
@@ -943,7 +828,7 @@ const LOGO_BASE64 = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUND
         if (!name && qty <= 1 && price === 0) return;
         const container = document.getElementById('lineItemsContainer');
         if (!container) return;
-        const newRow = buildLineItemRow('', 1, 0, '');
+        const newRow = buildLineItemRow('', '', '', '');
         container.appendChild(newRow);
         updateLineItemNumbers();
         recalcSummary();
@@ -964,7 +849,7 @@ const LOGO_BASE64 = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUND
         addItemBtn.addEventListener('click', () => {
             const container = document.getElementById('lineItemsContainer');
             if (!container) return;
-            const row = buildLineItemRow('', 1, 0, '');
+            const row = buildLineItemRow('', '', '', '');
             container.appendChild(row);
             updateLineItemNumbers();
             row.querySelector('.li-name')?.focus();
@@ -2953,7 +2838,7 @@ const LOGO_BASE64 = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUND
         if (container) {
             container.innerHTML = '';
             const defaultRows = [
-                {name:'',qty:1,price:0,unit:''}
+                {name:'',qty:'',price:'',unit:''}
             ];
             defaultRows.forEach((item, index) => {
                 const row = buildLineItemRow(item.name, item.qty, item.price, item.unit);
@@ -3075,18 +2960,18 @@ const LOGO_BASE64 = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUND
                 if (typeof parsedItems === 'string') {
                     try { parsedItems = JSON.parse(parsedItems); } catch(e) { parsedItems = []; }
                 }
-                if (!parsedItems.length) parsedItems = [{ name: '', qty: 1, price: 0, unit: '' }];
+                if (!parsedItems.length) parsedItems = [{ name: '', qty: '', price: '', unit: '' }];
                 parsedItems.forEach(item => {
                     const row = buildLineItemRow(
-                        item.name  || '',
-                        parseFloat(item.qty)   || 1,
-                        parseFloat(item.price) || 0,
+                        item.name || '',
+                        (item.qty === undefined || item.qty === null || item.qty === '') ? '' : item.qty,
+                        (item.price === undefined || item.price === null || item.price === '') ? '' : item.price,
                         item.unit  || ''
                     );
                     container.appendChild(row);
                 });
                 // Always add one blank row at the end
-                container.appendChild(buildLineItemRow('', 1, 0, ''));
+                container.appendChild(buildLineItemRow('', '', '', ''));
                 updateLineItemNumbers();
             }
 
@@ -5165,8 +5050,8 @@ const LOGO_BASE64 = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUND
     const PRICING_DB = {
         paper: {
             types: [
-                { key: '130_gsm',  label: '130 GSM',   os: 7,  fb: 12 },
-                { key: '170_gsm',  label: '170 GSM',   os: 7,  fb: 12 },
+                { key: '130_gsm',  label: '130 GSM',   os: 5,  fb: 10 },
+                { key: '170_gsm',  label: '170 GSM',   os: 5,  fb: 10 },
                 { key: '220_gsm',  label: '220 GSM',   os: 8,  fb: 14 },
                 { key: '250_gsm',  label: '250 GSM',   os: 8,  fb: 14 },
                 { key: '300_gsm',  label: '300 GSM',   os: 8,  fb: 14 },
@@ -5202,10 +5087,6 @@ const LOGO_BASE64 = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUND
             half:       { perSheet: 2,  min: 100 },
             full_shape: { perSheet: 5,  min: 200 },
         },
-        additionalServices: {
-            creasing:    { perSheet: 2, min: 150 },
-            perforation: { perSheet: 2, min: 150 },
-        }
     };
 
     /* Dynamic Inline Calculator Event Hooks completed */
