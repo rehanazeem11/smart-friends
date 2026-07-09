@@ -780,6 +780,104 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
         return row;
     }
 
+    function parseCategoryFromName(name) {
+        if (!name) return 'paper';
+        const lower = name.toLowerCase();
+        if (lower.indexOf('sheet:') === 0) return 'paper';
+        if (lower.indexOf('sticker:') === 0) return 'sticker';
+        if (lower.indexOf('flex:') === 0) return 'flex';
+        if (lower.indexOf('lamination:') === 0) return 'lamination';
+        if (lower.indexOf('cutting:') === 0) return 'cutting';
+        if (lower.indexOf('print only one side') === 0 || lower.indexOf('print only single side') === 0) return 'print_only_ss';
+        if (lower.indexOf('print only front & back') === 0 || lower.indexOf('print only front and back') === 0) return 'print_only_fb';
+        return ''; // Custom
+    }
+
+    function populateRowConfigFromDescription(row, cat, name) {
+        if (!cat || !name) return;
+        const lower = name.toLowerCase();
+
+        if (cat === 'paper') {
+            const typeSel = row.querySelector('.li-pjc-type');
+            const sideSel = row.querySelector('.li-pjc-side');
+            if (sideSel) {
+                if (lower.indexOf('(f/b)') !== -1 || lower.indexOf('f/b') !== -1) {
+                    sideSel.value = 'fb';
+                } else {
+                    sideSel.value = 'os';
+                }
+            }
+            if (typeSel) {
+                const matchedType = PRICING_DB.paper.types.find(t => lower.includes(t.label.toLowerCase()));
+                if (matchedType) {
+                    typeSel.value = matchedType.key;
+                }
+            }
+        } else if (cat === 'sticker') {
+            const typeSel = row.querySelector('.li-pjc-type');
+            if (typeSel) {
+                const matchedType = PRICING_DB.sticker.types.find(t => lower.includes(t.label.toLowerCase()));
+                if (matchedType) {
+                    typeSel.value = matchedType.key;
+                }
+            }
+        } else if (cat === 'flex') {
+            const typeSel = row.querySelector('.li-pjc-type');
+            const wInput = row.querySelector('.li-pjc-w');
+            const hInput = row.querySelector('.li-pjc-h');
+            const unitSel = row.querySelector('.li-pjc-unit');
+
+            if (typeSel) {
+                const matchedType = PRICING_DB.flex.types.find(t => lower.includes(t.label.toLowerCase()));
+                if (matchedType) {
+                    typeSel.value = matchedType.key;
+                }
+            }
+            const match = name.match(/(\d+(?:\.\d+)?)x(\d+(?:\.\d+)?)/);
+            if (match) {
+                if (wInput) wInput.value = match[1];
+                if (hInput) hInput.value = match[2];
+            }
+            if (unitSel) {
+                if (lower.includes('in')) {
+                    unitSel.value = 'in';
+                } else if (lower.includes('mm')) {
+                    unitSel.value = 'mm';
+                } else {
+                    unitSel.value = 'ft';
+                }
+            }
+        } else if (cat === 'lamination') {
+            const typeSel = row.querySelector('.li-pjc-type');
+            const sideSel = row.querySelector('.li-pjc-side');
+            if (typeSel) {
+                if (lower.includes('matte')) {
+                    typeSel.value = 'matte';
+                } else {
+                    typeSel.value = 'gloss';
+                }
+            }
+            if (sideSel) {
+                if (lower.includes('f/b') || lower.includes('(f/b)')) {
+                    sideSel.value = 'fb';
+                } else {
+                    sideSel.value = 'os';
+                }
+            }
+        } else if (cat === 'cutting') {
+            const typeSel = row.querySelector('.li-pjc-type');
+            if (typeSel) {
+                if (lower.includes('half')) {
+                    typeSel.value = 'half';
+                } else if (lower.includes('full shape')) {
+                    typeSel.value = 'full_shape';
+                } else {
+                    typeSel.value = 'normal';
+                }
+            }
+        }
+    }
+
     function setupLineItemRow(row) {
         const nameEl = row.querySelector('.li-name');
         const qtyEl = row.querySelector('.li-qty');
@@ -849,6 +947,13 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
             overrideEl.addEventListener('change', () => {
                 recalcSummary(); // recalcSummary calls detectBillType()
             });
+        }
+
+        if (catEl && nameEl) {
+            const parsedCat = parseCategoryFromName(nameEl.value);
+            catEl.value = parsedCat;
+            showRowConfigPanel(row, parsedCat);
+            populateRowConfigFromDescription(row, parsedCat, nameEl.value);
         }
     }
 
