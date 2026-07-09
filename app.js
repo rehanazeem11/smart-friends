@@ -2169,7 +2169,9 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
             ]);
             BILLS.length = 0; BILLS.push(...(Array.isArray(bills) ? bills : []));
             CUSTOMERS.length = 0; CUSTOMERS.push(...(Array.isArray(customers) ? customers : []));
+            saveOfflineCustomers();
             STAFF.length = 0; STAFF.push(...(Array.isArray(staff) ? staff : []));
+            saveOfflineStaff();
             EXPENSE_ENTRIES.length = 0; EXPENSE_ENTRIES.push(...(Array.isArray(expenses) ? expenses : []));
             if (customerPayments) {
                 window.CUSTOMER_PAYMENTS = customerPayments;
@@ -2671,6 +2673,7 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
     async function saveCustomerToServer(data) {
         const created = await apiPost('/customers', data);
         CUSTOMERS.push(created);
+        saveOfflineCustomers();
         renderCustomerGrid();
         return created;
     }
@@ -2808,7 +2811,15 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
             exists = nameMatch.find(c => (c.phone || '').replace(/\s/g,'') === phone.replace(/\s/g,''));
             if (!exists && nameMatch.length) {
                 exists = nameMatch.find(c => !c.phone);
-                if (exists) { exists.phone = phone; saveOfflineCustomers(); }
+                if (exists) {
+                    exists.phone = phone;
+                    saveOfflineCustomers();
+                    if (window._serverAvailable && (exists._id || exists.id)) {
+                        apiPut('/customers/' + (exists._id || exists.id), { phone: phone }).catch(e => {
+                            console.error('Failed to sync updated customer phone to server', e);
+                        });
+                    }
+                }
             }
         } else {
             exists = nameMatch[0] || null;
@@ -3558,7 +3569,9 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
                     console.log('Change detected in auto-sync. Redrawing views...');
                     BILLS.length = 0; BILLS.push(...(Array.isArray(bills) ? bills : []));
                     CUSTOMERS.length = 0; CUSTOMERS.push(...(Array.isArray(customers) ? customers : []));
+                    saveOfflineCustomers();
                     STAFF.length = 0; STAFF.push(...(Array.isArray(staff) ? staff : []));
+                    saveOfflineStaff();
                     EXPENSE_ENTRIES.length = 0; EXPENSE_ENTRIES.push(...(Array.isArray(expenses) ? expenses : []));
                     if (customerPayments) {
                         window.CUSTOMER_PAYMENTS = customerPayments;
