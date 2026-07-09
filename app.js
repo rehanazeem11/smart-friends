@@ -593,7 +593,7 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
         } else if (cat === 'print_only_ss') {
             panel.innerHTML = `
                 <div class="text-[11px] mb-2" style="color:var(--text-muted)">
-                    <strong>Print Only Single Side</strong> — ₹5 per sheet
+                    <strong>Print Only One Side</strong> — ₹5 per sheet
                 </div>
             `;
         } else if (cat === 'print_only_fb') {
@@ -711,7 +711,7 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
             totalCost += Math.max(raw, cut.min);
 
         } else if (cat === 'print_only_ss') {
-            descriptionText = 'Print Only Single Side';
+            descriptionText = 'Print Only One Side';
             unitText = 'sheet';
             totalCost += qty * 5;
 
@@ -755,8 +755,8 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
                             <option value="flex">Flex</option>
                             <option value="lamination">Lamination</option>
                             <option value="cutting">Cutting</option>
-                            <option value="print_only_ss">Print Only Single Side (₹5)</option>
-                            <option value="print_only_fb">Print Only Front & Back (₹10)</option>
+                            <option value="print_only_ss">Print Only One Side</option>
+                            <option value="print_only_fb">Print Only Front & Back</option>
                         </select>
                         <input class="input w-full li-name" list="billingItemShortcuts" placeholder="Description of Goods" value="${name}" />
                         <select class="select select-sm li-report-override" title="Report Type Override (Optional)" style="width: 100px; height: 38px; font-size: 12px; padding: 2px 6px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface);">
@@ -5308,9 +5308,9 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
     ============================================================ */
     const INVENTORY_ITEMS = [];
     let DROPDOWN_SETTINGS = {
-        materialTypes: ['A4 80gsm', 'A3 80gsm', 'Art Paper 130gsm', 'Card 250gsm', 'Art Paper 300gsm', '130 GSM', '170 GSM', '220 GSM', '250 GSM', '300 GSM', '350 GSM', '400 GSM', 'Maplitho', 'Bound', 'PVC', 'Normal Sticker', 'Thick Sticker', 'Transparent Sticker', 'Normal Flex', 'Star Flex', 'Vinyl', 'Blackout', 'Laminated'],
+        materialTypes: ['A4 80gsm', 'A3 80gsm', 'Art Paper 130gsm', 'Card 250gsm', 'Art Paper 300gsm', '130 GSM', '170 GSM', '220 GSM', '250 GSM', '300 GSM', '350 GSM', '400 GSM', 'Maplitho', 'Bound', 'PVC', 'Normal Sticker', 'Thick Sticker', 'Transparent Sticker', 'Normal Flex', 'Star Flex', 'Vinyl', 'Blackout', 'Laminated', 'Gloss Lamination', 'Matte Lamination', 'Normal Cutting', 'Half Cutting', 'Full Shape Cutting'],
         units: ['sheets', 'sqft', 'litres', 'rolls', 'pieces', 'pack'],
-        categories: ['Paper', 'Ink', 'Consumable', 'Flex', 'Sticker']
+        categories: ['Paper', 'Ink', 'Consumable', 'Flex', 'Sticker', 'Lamination', 'Cutting']
     };
 
     function isLowStock(item) {
@@ -5538,12 +5538,16 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
             + '<div class="space-y-4">'
             + '<div><label class="label">Item Mode</label>'
             + '<select class="select" id="ni-mode" onchange="onInventoryModeChange()">'
-            + '<option value="paper">Paper</option><option value="sticker">Sticker</option><option value="flex">Flex</option><option value="custom">Custom / Manual</option></select></div>'
+            + '<option value="paper">Paper</option><option value="sticker">Sticker</option><option value="flex">Flex</option><option value="lamination">Lamination</option><option value="cutting">Cutting</option><option value="custom">Custom / Manual</option></select></div>'
             + '<div id="ni-paper-config">'
             + '<div class="grid grid-cols-2 gap-3 mb-3"><div><label class="label">Paper Type</label><select class="select" id="ni-paper-type" onchange="onInventoryConfigChange()">' + paperOpts + '</select></div>'
             + '<div><label class="label">Print Side</label><select class="select" id="ni-paper-side" onchange="onInventoryConfigChange()"><option value="os">O/S — One Side</option><option value="fb">F/B — Both Sides</option></select></div></div></div>'
             + '<div id="ni-sticker-config" style="display:none"><div class="mb-3"><label class="label">Sticker Type</label><select class="select" id="ni-sticker-type" onchange="onInventoryConfigChange()">' + stickerOpts + '</select></div></div>'
             + '<div id="ni-flex-config" style="display:none"><div class="mb-3"><label class="label">Flex Material</label><select class="select" id="ni-flex-type" onchange="onInventoryConfigChange()">' + flexOpts + '</select></div></div>'
+            + '<div id="ni-lamination-config" style="display:none">'
+            + '<div class="grid grid-cols-2 gap-3 mb-3"><div><label class="label">Lamination Type</label><select class="select" id="ni-lamination-type" onchange="onInventoryConfigChange()"><option value="gloss">Gloss</option><option value="matte">Matte</option></select></div>'
+            + '<div><label class="label">Print Side</label><select class="select" id="ni-lamination-side" onchange="onInventoryConfigChange()"><option value="os">O/S — One Side</option><option value="fb">F/B — Both Sides</option></select></div></div></div>'
+            + '<div id="ni-cutting-config" style="display:none"><div class="mb-3"><label class="label">Cutting Type</label><select class="select" id="ni-cutting-type" onchange="onInventoryConfigChange()"><option value="normal">Normal</option><option value="half">Half</option><option value="full_shape">Full Shape</option></select></div></div>'
             + '<div id="ni-custom-config" style="display:none">'
             + '<div><label class="label">Item Name <span style="color:var(--rose)">*</span></label><input class="input" id="ni-name" placeholder="e.g. Art Paper 300gsm" /></div>'
             + '<div class="grid grid-cols-3 gap-3 mt-3"><div><label class="label">Category</label><select class="select" id="ni-category">' + cats + '</select></div>'
@@ -5567,6 +5571,8 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
         document.getElementById('ni-paper-config').style.display = mode === 'paper' ? '' : 'none';
         document.getElementById('ni-sticker-config').style.display = mode === 'sticker' ? '' : 'none';
         document.getElementById('ni-flex-config').style.display = mode === 'flex' ? '' : 'none';
+        document.getElementById('ni-lamination-config').style.display = mode === 'lamination' ? '' : 'none';
+        document.getElementById('ni-cutting-config').style.display = mode === 'cutting' ? '' : 'none';
         document.getElementById('ni-custom-config').style.display = mode === 'custom' ? '' : 'none';
         document.getElementById('ni-auto-fields').style.display = mode === 'custom' ? 'none' : '';
         if (mode !== 'custom') onInventoryConfigChange();
@@ -5591,6 +5597,27 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
             var t = PRICING_DB.flex.types.find(function(x) { return x.key === key; });
             if (t) { name = t.label; rate = t.rate; type = t.label; }
             category = 'Flex'; unit = 'sqft';
+        } else if (mode === 'lamination') {
+            var key = document.getElementById('ni-lamination-type')?.value || 'gloss';
+            var side = document.getElementById('ni-lamination-side')?.value || 'os';
+            var lam = PRICING_DB.lamination[key];
+            if (lam) {
+                var label = key === 'gloss' ? 'Gloss' : 'Matte';
+                name = 'Lamination: ' + label + ' (' + (side === 'os' ? 'O/S' : 'F/B') + ')';
+                rate = side === 'os' ? lam.perSheetOS : lam.perSheetFB;
+                type = label + ' Lamination';
+            }
+            category = 'Lamination'; unit = 'sheets';
+        } else if (mode === 'cutting') {
+            var key = document.getElementById('ni-cutting-type')?.value || 'normal';
+            var cut = PRICING_DB.cutting[key];
+            if (cut) {
+                var label = key === 'normal' ? 'Normal' : key === 'half' ? 'Half' : 'Full Shape';
+                name = 'Cutting: ' + label;
+                rate = cut.perUnit;
+                type = label + ' Cutting';
+            }
+            category = 'Cutting'; unit = 'pieces';
         }
         var nameEl = document.getElementById('ni-auto-name');
         var rateEl = document.getElementById('ni-auto-rate');
