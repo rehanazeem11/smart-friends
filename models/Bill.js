@@ -20,7 +20,8 @@ const billSchema = new mongoose.Schema({
         cgstAmount: Number,
         sgstAmount: Number,
         igstAmount: Number,
-        amount: Number
+        amount: Number,
+        report_type_override: { type: String, default: 'auto' }
     }],
     subtotal: Number,
     gst: Number,
@@ -67,7 +68,15 @@ const billSchema = new mongoose.Schema({
     placeOfSupply: String,
     reverseCharge: String,
     taxPayableReverseCharge: String,
-    eWayBillNo: String
+    eWayBillNo: String,
+
+    // Sheet tracking fields
+    printing_type: { type: String, default: '' },
+    sheet_quantity: { type: Number, default: 0 },
+    calculated_sheet_count: { type: Number, default: 0 },
+
+    // Report Type Override field
+    report_type_override: { type: String, default: 'auto' }
 }, { timestamps: true });
 
 module.exports = mongoose.model('Bill', billSchema);
