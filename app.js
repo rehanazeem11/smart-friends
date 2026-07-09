@@ -2006,7 +2006,11 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
         });
     }
 
-    const API_BASE = '/api';
+    const API_BASE = (window.location.port === '5000' || window.location.origin.includes(':5000'))
+        ? '/api'
+        : (window.location.hostname && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1')
+            ? `http://${window.location.hostname}:5000/api`
+            : 'http://localhost:5000/api';
     let CURRENT_USER = null;
 
     function stampRecord(obj, isUpdate) {
@@ -3476,13 +3480,6 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
         loadOfflineCustomers();
         loadOfflineStaff();
         loadActivityLog();
-        // rebuild customers from bills if any customers are missing
-        BILLS.forEach(b => {
-            if (b.customer && !CUSTOMERS.find(c => (c.name || '').toLowerCase() === (b.customer || '').toLowerCase())) {
-                CUSTOMERS.push({ name: b.customer, phone: b.phone || '' });
-            }
-        });
-        if (CUSTOMERS.length) saveOfflineCustomers();
         // load any offline-saved expenses
         loadOfflineExpenses();
         renderCustomerGrid();
