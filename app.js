@@ -936,6 +936,14 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
                 if (newCat) {
                     updateRowPricing(row, newCat);
                 } else {
+                    // Switching to "Custom" — the description/qty/price/unit were
+                    // auto-filled by the previous category's pricing formula and
+                    // no longer apply, so clear them for fresh manual entry.
+                    if (nameEl) nameEl.value = '';
+                    if (qtyEl) qtyEl.value = '';
+                    if (priceEl) priceEl.value = '';
+                    if (unitEl) unitEl.value = '';
+                    if (nameEl) nameEl.focus();
                     recalcRow(row);
                     recalcSummary();
                 }
@@ -2480,23 +2488,23 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
 
             doc.setFont('Helvetica', 'normal');
             doc.text('Subtotal:', 130, finalY);
-            doc.text(`Rs. ${subtotalAmt.toLocaleString('en-IN', {maximumFractionDigits:2})}`, 196, finalY, { halign: 'right' });
+            doc.text(`Rs. ${subtotalAmt.toLocaleString('en-IN', {maximumFractionDigits:2})}`, 196, finalY, { align: 'right' });
 
             doc.text(`GST (${gstPercentVal}%):`, 130, finalY + 5);
-            doc.text(`Rs. ${gstAmt.toLocaleString('en-IN', {maximumFractionDigits:2})}`, 196, finalY + 5, { halign: 'right' });
+            doc.text(`Rs. ${gstAmt.toLocaleString('en-IN', {maximumFractionDigits:2})}`, 196, finalY + 5, { align: 'right' });
 
             doc.setFont('Helvetica', 'bold');
             doc.text('Total Amount:', 130, finalY + 11);
-            doc.text(`Rs. ${totalAmt.toLocaleString('en-IN')}`, 196, finalY + 11, { halign: 'right' });
+            doc.text(`Rs. ${totalAmt.toLocaleString('en-IN')}`, 196, finalY + 11, { align: 'right' });
 
             doc.setFont('Helvetica', 'normal');
             doc.text('Amount Paid:', 130, finalY + 16);
-            doc.text(`Rs. ${paidAmt.toLocaleString('en-IN')}`, 196, finalY + 16, { halign: 'right' });
+            doc.text(`Rs. ${paidAmt.toLocaleString('en-IN')}`, 196, finalY + 16, { align: 'right' });
 
             doc.setFont('Helvetica', 'bold');
             doc.setTextColor(166, 72, 51);
             doc.text('Balance Due:', 130, finalY + 22);
-            doc.text(`Rs. ${dueAmt.toLocaleString('en-IN')}`, 196, finalY + 22, { halign: 'right' });
+            doc.text(`Rs. ${dueAmt.toLocaleString('en-IN')}`, 196, finalY + 22, { align: 'right' });
 
             doc.setTextColor(100, 100, 100);
             doc.setFont('Helvetica', 'normal');
@@ -2933,6 +2941,11 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
             grid.innerHTML = '<div class="text-center" style="color:var(--text-muted);grid-column:1/-1;padding:32px">No customers found.</div>';
         } else {
             filtered.forEach(c => grid.appendChild(buildCustomerCard(c)));
+            // Safety-net re-pass: the avatar and "View Profile" icons are the only
+            // visible content in their spots, so a missed per-card lucide conversion
+            // (common when many cards are built in one tight loop) reads as the icon
+            // having vanished entirely.
+            try { if (typeof lucide !== 'undefined') lucide.createIcons(); } catch (e) { console.error('lucide.createIcons global re-pass failed', e); }
         }
 
         const customerSearch = document.getElementById('customer-search-input');
@@ -3003,7 +3016,7 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
             </div>
             ${actionsHtml}`;
 
-        lucide.createIcons({ nodes: [card] });
+        try { lucide.createIcons({ nodes: [card] }); } catch (e) { console.error('lucide.createIcons failed for staff card', e); }
         card.querySelector('.staff-edit-btn')?.addEventListener('click', () => openEditStaffModal(staff));
         card.querySelector('.staff-delete-btn')?.addEventListener('click', () => deleteStaffMember(staff));
         const toggle = card.querySelector('input[type="checkbox"]');
@@ -3108,6 +3121,10 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
             return;
         }
         STAFF.forEach(user => grid.appendChild(buildStaffCard(user)));
+        // Safety-net re-pass: the edit/delete buttons are icon-only "ghost" buttons
+        // with no visible chrome of their own, so if the per-card lucide conversion
+        // above ever misses one, it reads as the whole button having vanished.
+        try { if (typeof lucide !== 'undefined') lucide.createIcons(); } catch (e) { console.error('lucide.createIcons global re-pass failed', e); }
     }
 
     function updateReportStaffOptions() {
@@ -4136,75 +4153,6 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
     document.getElementById('bill-filter-start')?.addEventListener('input', window.filterBills);
     document.getElementById('bill-filter-end')?.addEventListener('input', window.filterBills);
     document.getElementById('bill-filter-month')?.addEventListener('input', window.filterBills);
-
-    /* ============================================================
-       CUSTOMERS — "New Customer" button + View Profile
-    ============================================================ */
-    document.querySelector('#page-customers .btn.btn-primary')?.addEventListener('click', () => {
-        openModal(`
-            <div class="font-serif text-2xl font-bold mb-1">New Customer</div>
-            <div class="text-sm mb-5" style="color:var(--text-muted)">Add a new customer to the directory</div>
-            <div class="space-y-4">
-                <div><label class="label">Customer / Company Name <span style="color:var(--rose)">*</span></label>
-                    <input class="input" id="nc-name" placeholder="e.g. Raj Enterprises" /></div>
-                <div class="grid grid-cols-2 gap-3">
-                    <div><label class="label">Phone</label>
-                        <input class="input font-mono" id="nc-phone" placeholder="optional" /></div>
-                    <div><label class="label">Email</label>
-                        <input class="input" id="nc-email" placeholder="optional" /></div>
-                </div>
-                <div><label class="label">GST Number</label>
-                    <input class="input font-mono" id="nc-gst" placeholder="optional" /></div>
-                <div><label class="label">Address</label>
-                    <textarea class="input" id="nc-addr" rows="2" placeholder="optional"></textarea></div>
-                <button class="btn btn-primary w-full mt-2" onclick="saveNewCustomer()">
-                    <i data-lucide="user-plus" class="w-4 h-4"></i> Add Customer
-                </button>
-            </div>
-        `);
-    });
-
-    window.saveNewCustomer = function() {
-        const name = document.getElementById('nc-name')?.value.trim();
-        const phone = document.getElementById('nc-phone')?.value.trim();
-        if (!name) { toast('Name is required', 'alert-circle'); return; }
-        // Add a new card to the grid
-        const grid = document.getElementById('customer-grid');
-        if (grid) {
-            const card = document.createElement('div');
-            card.className = 'customer-card';
-            card.dataset.cname = name;
-            card.dataset.cphone = phone;
-            card.dataset.cltv = '0';
-            card.dataset.coutstanding = '0';
-            card.dataset.corders = '0';
-            card.dataset.clast = '—';
-            card.dataset.cbills = '[]';
-            card.innerHTML = `
-                <div class="flex items-center gap-3 mb-4">
-                    <div class="customer-avatar"><i data-lucide="user" class="w-5 h-5"></i></div>
-                    <div>
-                        <div class="font-serif font-bold text-lg">${name}</div>
-                        <div class="text-sm font-mono flex items-center gap-1" style="color:var(--text-muted)">
-                            <i data-lucide="phone" class="w-3 h-3"></i> ${phone}
-                        </div>
-                    </div>
-                </div>
-                <div class="text-xs font-bold uppercase tracking-widest mb-1" style="color:var(--text-muted)">Lifetime Value</div>
-                <div class="font-serif font-bold text-2xl mb-4" style="color:var(--gold-strong)">₹ 0</div>
-                <div class="flex items-center justify-between text-xs" style="color:var(--text-muted)">
-                    <span>0 orders</span><span>—</span>
-                </div>
-                <button class="btn btn-primary w-full mt-4 text-sm view-profile-btn">
-                    <i data-lucide="eye" class="w-3.5 h-3.5"></i> View Profile
-                </button>`;
-            grid.appendChild(card);
-            lucide.createIcons({ nodes: [card] });
-            card.querySelector('.view-profile-btn').addEventListener('click', () => openCustomerProfile(card));
-        }
-        toast(`Customer "${name}" added`);
-        document.getElementById('modalOverlay').style.display = 'none';
-    };
 
     /* ============================================================
        CUSTOMER PROFILE — full-page dashboard
@@ -8198,7 +8146,7 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
             doc.text('per', 124, headerY);
             doc.text('Disc %', 142, headerY, { align: 'right' });
             doc.text('Taxable Val', 159, headerY, { align: 'right' });
-            doc.text('GST%', 168, headerY);
+            doc.text('GST%', 171, headerY, { align: 'right' });
             doc.text('GST Amt', 184, headerY, { align: 'right' });
             doc.text('Total Amt', 199, headerY, { align: 'right' });
             
@@ -8280,14 +8228,21 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
             doc.text(wordsAmt, 12, bottomStartY + 8, { maxWidth: 76 });
             
             // HSN table details (Right Column X = 90 to X = 200)
-            const hsnColX = [90, 108, 126, 134, 145, 153, 164, 172, 183, 200];
+            // Major group boundaries (HSN/SAC, Taxable Val, CGST, SGST, IGST, Total Tax)
+            const hsnMajorColX = [90, 108, 126, 145, 164, 183, 200];
+            // Sub-dividers between each group's "Rate" and "Amt" values — these must not
+            // cross the merged group header (e.g. "Central (CGST)"), only the rows below it.
+            const hsnSubColX = [134, 153, 172];
             doc.setFillColor(248, 248, 248);
             doc.rect(90, bottomStartY, 110, 8, 'F');
             doc.line(90, bottomStartY + 8, 200, bottomStartY + 8);
-            
+
             // Draw HSN columns
-            hsnColX.forEach(hx => {
+            hsnMajorColX.forEach(hx => {
                 doc.line(hx, bottomStartY, hx, bottomEndY - 6); // ends before HSN totals row
+            });
+            hsnSubColX.forEach(hx => {
+                doc.line(hx, bottomStartY + 8, hx, bottomEndY - 6); // starts below the merged header row
             });
             
             // Draw HSN Headers
@@ -8296,9 +8251,9 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
             doc.setTextColor(0, 0, 0);
             doc.text('HSN/SAC', 91, bottomStartY + 5);
             doc.text('Taxable Val', 109, bottomStartY + 5);
-            doc.text('Central (CGST)', 128.5, bottomStartY + 3.5); doc.text('Rate / Amt', 128.5, bottomStartY + 6.5);
-            doc.text('State (SGST)', 150.5, bottomStartY + 3.5); doc.text('Rate / Amt', 150.5, bottomStartY + 6.5);
-            doc.text('Integrated', 172.5, bottomStartY + 3.5); doc.text('Rate / Amt', 172.5, bottomStartY + 6.5);
+            doc.text('Central (CGST)', 135.5, bottomStartY + 3.5, { align: 'center' }); doc.text('Rate / Amt', 135.5, bottomStartY + 6.5, { align: 'center' });
+            doc.text('State (SGST)', 154.5, bottomStartY + 3.5, { align: 'center' }); doc.text('Rate / Amt', 154.5, bottomStartY + 6.5, { align: 'center' });
+            doc.text('Integrated', 173.5, bottomStartY + 3.5, { align: 'center' }); doc.text('Rate / Amt', 173.5, bottomStartY + 6.5, { align: 'center' });
             doc.text('Total Tax', 184, bottomStartY + 5);
             
             // Group taxes by HSN
