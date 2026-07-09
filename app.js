@@ -2006,11 +2006,14 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
         });
     }
 
-    const API_BASE = (window.location.port === '5000' || window.location.origin.includes(':5000'))
-        ? '/api'
-        : (window.location.hostname && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1')
-            ? `http://${window.location.hostname}:5000/api`
-            : 'http://localhost:5000/api';
+    const savedServerIp = localStorage.getItem('fp_server_ip') || '';
+    const API_BASE = savedServerIp
+        ? `http://${savedServerIp}:5000/api`
+        : (window.location.port === '5000' || window.location.origin.includes(':5000'))
+            ? '/api'
+            : (window.location.hostname && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1')
+                ? `http://${window.location.hostname}:5000/api`
+                : 'http://localhost:5000/api';
     let CURRENT_USER = null;
 
     function stampRecord(obj, isUpdate) {
@@ -2226,6 +2229,7 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
         setVal('store-cgst', STORE_SETTINGS.cgst);
         setVal('store-sgst', STORE_SETTINGS.sgst);
         setVal('store-terms', STORE_SETTINGS.terms);
+        setVal('store-server-ip', localStorage.getItem('fp_server_ip') || '');
         
         // Restore Invoice phone toggle
         const invShowPhone = document.getElementById('inv-show-phone');
@@ -3817,6 +3821,13 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
         STORE_SETTINGS.sgst = parseFloat(getVal('store-sgst')) || 0;
         STORE_SETTINGS.terms = getVal('store-terms') || '';
 
+        const serverIp = getVal('store-server-ip');
+        if (serverIp) {
+            localStorage.setItem('fp_server_ip', serverIp);
+        } else {
+            localStorage.removeItem('fp_server_ip');
+        }
+
         localStorage.setItem('fp_store_settings', JSON.stringify(STORE_SETTINGS));
         if (window._serverAvailable) {
             try {
@@ -3851,7 +3862,7 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
 
         updateInvPreview();
         if (typeof updateDashboardStats === 'function') updateDashboardStats();
-        toast('Store settings saved successfully', 'check-circle');
+        toast('Store settings saved. Please reload page if you updated the Server IP.', 'check-circle');
     };
 
     window.saveInvoiceSettings = function() {
