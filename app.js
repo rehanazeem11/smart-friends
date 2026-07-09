@@ -2183,7 +2183,7 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
                 const stored = localStorage.getItem('fp_store_settings');
                 if (stored) STORE_SETTINGS = { ...STORE_SETTINGS, ...JSON.parse(stored) };
             }
-            if (Array.isArray(inventory) && inventory.length) {
+            if (Array.isArray(inventory)) {
                 INVENTORY_ITEMS.length = 0;
                 INVENTORY_ITEMS.push(...inventory);
             }
@@ -3567,7 +3567,7 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
                         STORE_SETTINGS = { ...STORE_SETTINGS, ...storeSettings };
                         populateSettingsUI();
                     }
-                    if (Array.isArray(inventory) && inventory.length) {
+                    if (Array.isArray(inventory)) {
                         INVENTORY_ITEMS.length = 0;
                         INVENTORY_ITEMS.push(...inventory);
                     }
@@ -5844,7 +5844,18 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
         });
         INVENTORY_ITEMS.push(newItem);
         window.saveInventoryData();
-        if (window._serverAvailable) { apiPost('/inventory', newItem).then(function(saved) { if (saved && saved._id) newItem.id = saved._id; }).catch(function(){}); }
+        if (window._serverAvailable) {
+            apiPost('/inventory', newItem).then(function(saved) {
+                if (saved && saved._id) {
+                    newItem.id = saved._id;
+                    newItem._id = saved._id;
+                    window.saveInventoryData();
+                    window.renderInventoryTable();
+                }
+            }).catch(function(e) {
+                console.error('Failed to save new inventory item to server', e);
+            });
+        }
         window.renderInventoryTable();
         window.renderDashboardLowStock();
         document.getElementById('modalOverlay').style.display = 'none';

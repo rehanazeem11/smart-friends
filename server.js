@@ -178,7 +178,12 @@ app.put('/api/inventory/:id', async (req, res) => {
 
 app.delete('/api/inventory/:id', async (req, res) => {
     try {
-        await Inventory.findByIdAndDelete(req.params.id);
+        const id = req.params.id;
+        if (mongoose.Types.ObjectId.isValid(id)) {
+            await Inventory.findByIdAndDelete(id);
+        } else {
+            await Inventory.findOneAndDelete({ name: id });
+        }
         res.json({ ok: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
