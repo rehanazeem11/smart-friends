@@ -1465,7 +1465,7 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
     const COUNTER_MATERIAL_NAMES = [
         '130 gsm', '170 gsm', '220 gsm', '250 gsm', '300 gsm', '350 gsm', '400 gsm',
         'maplitho', 'bound',
-        'pvc', 'normal sticker', 'thick sticker', 'transparent sticker'
+        'pvc', 'sticker'
     ];
 
     function isCounterItem(itemName) {
