@@ -33,7 +33,31 @@ app.get('/api/bills', async (req, res) => {
 
 app.post('/api/bills', async (req, res) => {
     try {
-        const bill = await Bill.create(req.body);
+        let bill;
+        try {
+            bill = await Bill.create(req.body);
+        } catch (err) {
+            // Invoice numbers are suggested by the client from its local (up to a few
+            // seconds stale) bill list, so two accounts creating a bill around the same
+            // time can propose the same number. Resolve the collision using the
+            // database's current state (the source of truth) instead of dropping the bill.
+            if (err.code === 11000 && err.keyPattern && err.keyPattern.inv) {
+                const match = /^([A-Za-z]+-)(\d+)$/.exec(req.body.inv || '');
+                const prefix = match ? match[1] : '';
+                const width = match ? match[2].length : 3;
+                const escapedPrefix = prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                const existing = await Bill.find({ inv: { $regex: '^' + escapedPrefix } }, { inv: 1 }).lean();
+                let maxNum = 0;
+                existing.forEach(b => {
+                    const num = parseInt(String(b.inv).slice(prefix.length), 10);
+                    if (!isNaN(num) && num > maxNum) maxNum = num;
+                });
+                req.body.inv = prefix + String(maxNum + 1).padStart(width, '0');
+                bill = await Bill.create(req.body);
+            } else {
+                throw err;
+            }
+        }
         res.status(201).json(bill);
     } catch (e) { res.status(500).json({ error: e.message }); }
 });

@@ -1179,7 +1179,7 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
             const shipTo = document.getElementById('shipTo')?.value?.trim();
             const billTo = document.getElementById('billTo')?.value?.trim();
             if (!custName) { toast('Please enter customer name', 'alert-circle'); return; }
-            const invNum = window.getNextNormalInvoiceNo();
+            let invNum = window.getNextNormalInvoiceNo();
 
 
             const items = [];
@@ -1239,7 +1239,10 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
             const totalText = document.getElementById('previewTotal')?.textContent || '—';
 
             try {
-                await saveBillToServer(billObj);
+                const created = await saveBillToServer(billObj);
+                // If the proposed number collided with a bill from another account, the
+                // server assigns the next free one — reflect that in the confirmation UI.
+                if (created && created.inv) invNum = created.inv;
                 if (typeof window.deductInventoryFromBill === 'function') window.deductInventoryFromBill(items);
                 resetNewBillForm();
                 openModal(`
@@ -2008,12 +2011,17 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
 
     const savedServerIp = localStorage.getItem('fp_server_ip') || '';
     const API_BASE = savedServerIp
-        ? `http://${savedServerIp}:5000/api`
-        : (window.location.port === '5000' || window.location.origin.includes(':5000'))
-            ? '/api'
-            : (window.location.hostname && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1')
-                ? `http://${window.location.hostname}:5000/api`
-                : 'http://localhost:5000/api';
+        // Manual override (Settings > Server IP): accept either a bare LAN IP
+        // (e.g. 192.168.1.5) or a full URL (e.g. a Render deployment URL).
+        ? (/^https?:\/\//i.test(savedServerIp) ? savedServerIp.replace(/\/+$/, '') + '/api' : `http://${savedServerIp}:5000/api`)
+        : (window.location.port === '8080')
+            // Static dev-server.js (frontend-only, port 8080) doesn't host the API —
+            // it lives on the separate local server.js instance on port 5000.
+            ? 'http://localhost:5000/api'
+            // In every other case (localhost:5000, a LAN host:5000, or a deployed
+            // origin like Render) server.js serves the frontend AND the API from
+            // the same origin, so a same-origin relative path always resolves correctly.
+            : '/api';
     let CURRENT_USER = null;
 
     function stampRecord(obj, isUpdate) {
@@ -2195,6 +2203,7 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
             if (Array.isArray(inventory)) {
                 INVENTORY_ITEMS.length = 0;
                 INVENTORY_ITEMS.push(...inventory);
+                if (typeof window.saveInventoryData === 'function') window.saveInventoryData();
             }
             if (Array.isArray(activity) && activity.length) {
                 ACTIVITY_LOG.length = 0;
@@ -2676,6 +2685,7 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
             if (typeof renderDashboardRecentBills === 'function') renderDashboardRecentBills();
             if (typeof updateDashboardStats === 'function') updateDashboardStats();
         }, 0);
+        return created;
     }
 
     async function saveCustomerToServer(data) {
@@ -5480,6 +5490,9 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
     }
 
     window.loadInventoryData = function() {
+        // Inventory was already loaded from the shared database in loadServerData();
+        // don't overwrite it with this browser's stale local cache.
+        if (window._serverAvailable) return;
         const stored = localStorage.getItem('fp_inventory_items');
         if (stored) {
             try {
@@ -5514,6 +5527,7 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
     window.deductInventoryFromBill = function(billItems) {
         if (!billItems || !billItems.length || !INVENTORY_ITEMS.length) return;
         let deducted = [];
+        let changedItems = [];
         billItems.forEach(bi => {
             const biName = (bi.name || '').toLowerCase();
             if (!biName) return;
@@ -5527,12 +5541,23 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
                 const deductQty = parseFloat(bi.qty) || 0;
                 match.qty = Math.max(0, (parseFloat(match.qty) || 0) - deductQty);
                 deducted.push({ name: match.name, deducted: deductQty, remaining: match.qty });
+                changedItems.push(match);
             }
         });
         if (deducted.length) {
             window.saveInventoryData();
             if (typeof window.renderInventoryTable === 'function') window.renderInventoryTable();
             if (typeof window.renderDashboardLowStock === 'function') window.renderDashboardLowStock();
+            // Persist the new quantities to the shared database so every account sees the update
+            if (window._serverAvailable) {
+                changedItems.forEach(item => {
+                    const id = item._id || item.id;
+                    if (!id) return;
+                    apiPut('/inventory/' + id, item).catch(function(e) {
+                        console.error('Failed to sync inventory deduction to server', e);
+                    });
+                });
+            }
         }
         return deducted;
     }
@@ -6979,7 +7004,7 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
             const consigneeStateCode = document.getElementById('gstConsigneeStateCode')?.value || '';
             
             // Invoice references
-            const invNum = EDIT_GST_BILL_ID ? EDIT_GST_BILL_ID : getNextGstInvoiceNo();
+            let invNum = EDIT_GST_BILL_ID ? EDIT_GST_BILL_ID : getNextGstInvoiceNo();
             const dueDate = document.getElementById('gstDueDate')?.value || '';
             const deliveryNote = document.getElementById('gstDeliveryNote')?.value?.trim() || '';
             const modeTermsPayment = document.getElementById('gstModePayment')?.value?.trim() || '';
@@ -7102,17 +7127,9 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
                     const bIdx = BILLS.findIndex(b => b.inv === EDIT_GST_BILL_ID);
                     if (bIdx >= 0) BILLS[bIdx] = billObj;
 
-                    // Deduct updated inventory
+                    // Deduct updated inventory (syncs the new quantities to the server internally)
                     if (typeof window.deductInventoryFromBill === 'function') {
                         window.deductInventoryFromBill(items.map(i => ({ name: i.name, qty: i.qty })));
-                        if (window._serverAvailable) {
-                            INVENTORY_ITEMS.forEach(match => {
-                                const bi = items.find(i => (i.name||'').toLowerCase().includes((match.name||'').toLowerCase()));
-                                if (bi) {
-                                    apiPut('/inventory/' + (match._id || match.id), match).catch(e => console.error('GST inventory sync error', e));
-                                }
-                            });
-                        }
                     }
 
                     // Save offline list to localStorage just in case
@@ -7147,23 +7164,16 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
                     logActivity('GST Bill Updated', `Updated GST Invoice <span class="font-mono font-bold" style="color:var(--primary)">${savedInvId}</span> for ${buyerCompany} · ₹ ${Math.round(grandTotalVal).toLocaleString('en-IN')}`);
                 } else {
                     // Save to database
-                    await saveBillToServer(billObj);
-                    
-                    // Deduct inventory
+                    const created = await saveBillToServer(billObj);
+                    // If the proposed number collided with a bill from another account, the
+                    // server assigns the next free one — reflect that in the confirmation UI.
+                    if (created && created.inv) invNum = created.inv;
+
+                    // Deduct inventory (syncs the new quantities to the server internally)
                     if (typeof window.deductInventoryFromBill === 'function') {
                         window.deductInventoryFromBill(items.map(i => ({ name: i.name, qty: i.qty })));
-                        // Force update inventory values and UI
-                        if (window._serverAvailable) {
-                            // Push inventory changes immediately
-                            INVENTORY_ITEMS.forEach(match => {
-                                const bi = items.find(i => (i.name||'').toLowerCase().includes((match.name||'').toLowerCase()));
-                                if (bi) {
-                                    apiPut('/inventory/' + (match._id || match.id), match).catch(e => console.error('GST inventory sync error', e));
-                                }
-                            });
-                        }
                     }
-                    
+
                     resetGstInvoiceForm();
                     
                     // Display confirmation modal with actions
