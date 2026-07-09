@@ -2065,6 +2065,8 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
         var entry = { user: userName, role: userRole, action: action, details: details, timestamp: timestamp, dateSort: now.toISOString() };
         ACTIVITY_LOG.push(entry);
         try { localStorage.setItem('fp_activity_log', JSON.stringify(ACTIVITY_LOG)); } catch(e) {}
+        // Not routed through the outbox: a POST create isn't replay-safe (a retry
+        // after an ambiguous failure could create a duplicate log entry).
         if (window._serverAvailable) { try { apiPost('/activity', entry); } catch(e) {} }
         renderActivityLog();
     }
@@ -2174,6 +2176,88 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
+    }
+
+    /* ============================================================
+       SYNC OUTBOX — retry queue for failed writes
+       A PUT/POST/DELETE that fails (or is attempted while offline) is
+       queued here instead of just being logged and dropped. The
+       auto-sync loop drains this queue every cycle once the server is
+       reachable again, so a change made during a network blip still
+       reaches the shared database instead of staying local forever.
+       This only replaces the failure-handling plumbing around existing
+       API calls — it does not change what any write contains or when
+       it's triggered.
+    ============================================================ */
+    function loadOutbox() {
+        try {
+            const arr = JSON.parse(localStorage.getItem('fp_sync_outbox') || '[]');
+            return Array.isArray(arr) ? arr : [];
+        } catch (e) { return []; }
+    }
+
+    function saveOutbox(outbox) {
+        try { localStorage.setItem('fp_sync_outbox', JSON.stringify(outbox)); } catch (e) {}
+    }
+
+    function queueOutboxWrite(method, path, body) {
+        const outbox = loadOutbox();
+        outbox.push({
+            id: 'ob_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9),
+            method,
+            path,
+            body: (body === undefined ? null : body),
+            queuedAt: new Date().toISOString()
+        });
+        saveOutbox(outbox);
+    }
+
+    // Attempts a write immediately; if it fails (or the server is already
+    // known to be unreachable), queues it for automatic retry instead of
+    // discarding it. Callers already update local state optimistically
+    // before calling this, so a queued (not-yet-synced) write is safe —
+    // it will land on the server on a later auto-sync cycle.
+    async function syncWrite(method, path, body) {
+        if (!window._serverAvailable) {
+            queueOutboxWrite(method, path, body);
+            return null;
+        }
+        try {
+            return await fetchJson(`${API_BASE}${path}`, {
+                method,
+                headers: { 'Content-Type': 'application/json' },
+                body: body !== undefined ? JSON.stringify(body) : undefined
+            });
+        } catch (e) {
+            console.error(`Sync failed for ${method} ${path} — queued for retry`, e);
+            queueOutboxWrite(method, path, body);
+            return null;
+        }
+    }
+
+    // Retries every queued write once. Entries that fail again stay queued
+    // for the next cycle; entries that succeed are removed. Returns true if
+    // at least one queued write landed, so the caller can refresh its view.
+    async function flushOutbox() {
+        const outbox = loadOutbox();
+        if (!outbox.length) return false;
+        const remaining = [];
+        let syncedCount = 0;
+        for (const entry of outbox) {
+            try {
+                await fetchJson(`${API_BASE}${entry.path}`, {
+                    method: entry.method,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: entry.body !== null ? JSON.stringify(entry.body) : undefined
+                });
+                syncedCount++;
+            } catch (e) {
+                remaining.push(entry);
+            }
+        }
+        saveOutbox(remaining);
+        if (syncedCount > 0) console.log(`[outbox] synced ${syncedCount} queued write${syncedCount === 1 ? '' : 's'}`);
+        return syncedCount > 0;
     }
 
     window._serverAvailable = false;
@@ -2315,14 +2399,8 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
 
         BILLS.splice(idx, 1);
         try { localStorage.setItem('fp_bills_offline', JSON.stringify(BILLS.filter(function(b) { return b._offline; }))); } catch(e) {}
-        if (window._serverAvailable) {
-            try {
-                await fetchJson(API_BASE + '/bills/' + inv, { method: 'DELETE' });
-            } catch(e) {
-                console.error('Failed to delete bill on server', e);
-            }
-        }
-        
+        await syncWrite('DELETE', '/bills/' + inv);
+
         if (currentCustomerData && currentCustomerData.bills) {
             currentCustomerData.bills = currentCustomerData.bills.filter(b => b.inv !== inv);
             refreshProfileStats();
@@ -2355,9 +2433,7 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
                 const restoreQty = parseFloat(bi.qty) || 0;
                 match.qty = (parseFloat(match.qty) || 0) + restoreQty;
                 restored.push({ name: match.name, restored: restoreQty, remaining: match.qty });
-                if (window._serverAvailable) {
-                    apiPut('/inventory/' + (match._id || match.id), match).catch(e => console.error('Error syncing restored inventory', e));
-                }
+                syncWrite('PUT', '/inventory/' + (match._id || match.id), match);
             }
         });
         if (restored.length) {
@@ -2577,12 +2653,9 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
         if (idx !== -1) CUSTOMERS.splice(idx, 1);
         saveOfflineCustomers();
 
-        if (window._serverAvailable) {
-            fetchJson(API_BASE + '/customers/' + id, { method: 'DELETE' }).catch(e => {
-                console.error('Error deleting customer from server', e);
-                toast('Warning: Customer removed locally, server sync failed', 'alert-circle');
-            });
-        }
+        syncWrite('DELETE', '/customers/' + id).then(result => {
+            if (result === null) toast('Customer deleted locally — will sync once reconnected', 'cloud-off');
+        });
 
         logActivity('Customer Deleted', `Deleted customer <strong>${customer.name}</strong>`);
         toast('Customer deleted', 'check-circle');
@@ -2599,13 +2672,7 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
 
         customer.archived = archiveState;
         saveOfflineCustomers();
-        if (window._serverAvailable) {
-            try {
-                await apiPut('/customers/' + id, { archived: archiveState });
-            } catch (e) {
-                console.error('Error archiving customer', e);
-            }
-        }
+        await syncWrite('PUT', '/customers/' + id, { archived: archiveState });
         renderCustomerGrid();
         logActivity(`Customer ${archiveState ? 'Archived' : 'Unarchived'}`, `Marked customer <strong>${customer.name}</strong> as ${archiveState ? 'archived' : 'active'}`);
         toast(`Customer ${archiveState ? 'archived' : 'unarchived'}`, 'check-circle');
@@ -2660,13 +2727,10 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
         syncExpenseViews();
         if (typeof updateDashboardStats === 'function') updateDashboardStats();
 
-        if (window._serverAvailable) {
-            const serverId = expense._id || expense.id;
-            fetchJson(API_BASE + '/expenses/' + serverId, { method: 'DELETE' }).catch(e => {
-                console.error('Error deleting expense from server', e);
-                toast('Warning: Expense removed locally, server sync failed', 'alert-circle');
-            });
-        }
+        const serverId = expense._id || expense.id;
+        syncWrite('DELETE', '/expenses/' + serverId).then(result => {
+            if (result === null) toast('Expense deleted locally — will sync once reconnected', 'cloud-off');
+        });
 
         logActivity('Expense Deleted', `Deleted expense of <strong>₹${expense.amount}</strong> for ${expense.description || 'unknown'}`);
         toast('Expense deleted', 'check-circle');
@@ -2840,10 +2904,8 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
                 if (exists) {
                     exists.phone = phone;
                     saveOfflineCustomers();
-                    if (window._serverAvailable && (exists._id || exists.id)) {
-                        apiPut('/customers/' + (exists._id || exists.id), { phone: phone }).catch(e => {
-                            console.error('Failed to sync updated customer phone to server', e);
-                        });
+                    if (exists._id || exists.id) {
+                        syncWrite('PUT', '/customers/' + (exists._id || exists.id), { phone: phone });
                     }
                 }
             }
@@ -3023,13 +3085,7 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
         toggle?.addEventListener('change', async () => {
             staff.active = toggle.checked;
             saveOfflineStaff();
-            if (window._serverAvailable) {
-                try {
-                    await apiPut('/staff/' + (staff._id || staff.id), { active: staff.active });
-                } catch(e) {
-                    console.error('Failed to sync staff toggle to server', e);
-                }
-            }
+            await syncWrite('PUT', '/staff/' + (staff._id || staff.id), { active: staff.active });
             renderStaffGrid();
         });
         return card;
@@ -3070,19 +3126,13 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
         if (pass) match.password = pass;
 
         saveOfflineStaff();
-        if (window._serverAvailable) {
-            try {
-                await apiPut('/staff/' + (match._id || match.id), {
-                    name: match.name,
-                    email: match.email,
-                    role: match.role,
-                    ...(pass ? { password: match.password } : {})
-                });
-            } catch(e) {
-                console.error('Failed to sync staff edit to server', e);
-            }
-        }
-        
+        await syncWrite('PUT', '/staff/' + (match._id || match.id), {
+            name: match.name,
+            email: match.email,
+            role: match.role,
+            ...(pass ? { password: match.password } : {})
+        });
+
         renderStaffGrid();
         document.getElementById('modalOverlay').style.display = 'none';
         toast('Staff "' + name + '" updated', 'check-circle');
@@ -3091,14 +3141,8 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
 
     async function deleteStaffMember(staff) {
         if (!confirm('Delete staff member "' + staff.name + '"?')) return;
-        
-        if (window._serverAvailable) {
-            try {
-                await fetchJson(API_BASE + '/staff/' + (staff._id || staff.id), { method: 'DELETE' });
-            } catch(e) {
-                console.error('Failed to sync staff delete to server', e);
-            }
-        }
+
+        await syncWrite('DELETE', '/staff/' + (staff._id || staff.id));
 
         var idx = STAFF.indexOf(staff);
         if (idx !== -1) {
@@ -3173,9 +3217,9 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
         const discount = document.getElementById('discountInput'); if (discount) discount.value = '0';
         // Always use the GST value from Settings (CGST + SGST) — never hardcode
         const gst = document.getElementById('gstInput'); if (gst) gst.value = (typeof getStoreGstInfo === 'function') ? getStoreGstInfo().percent : 18;
-        document.getElementById('paidInput') && (document.getElementById('paidInput').value = '0');
-        document.getElementById('cashPaidInput') && (document.getElementById('cashPaidInput').value = '0');
-        document.getElementById('onlinePaidInput') && (document.getElementById('onlinePaidInput').value = '0');
+        document.getElementById('paidInput') && (document.getElementById('paidInput').value = '');
+        document.getElementById('cashPaidInput') && (document.getElementById('cashPaidInput').value = '');
+        document.getElementById('onlinePaidInput') && (document.getElementById('onlinePaidInput').value = '');
         document.querySelectorAll('#paymentModePills button').forEach(btn => btn.classList.toggle('active', btn.dataset.payment === 'single'));
         updatePaymentModeFields();
         const container = document.getElementById('lineItemsContainer');
@@ -3215,25 +3259,9 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
         if (typeof window.renderDashboardLowStock === 'function') window.renderDashboardLowStock();
     }
 
-    /** PUT updated bill to server; falls back to in-memory update */
+    /** PUT updated bill to server; queues for retry if the write fails or is offline */
     async function updateBillOnServer(inv, updatedBill) {
-        if (window._serverAvailable) {
-            try {
-                const result = await apiPut('/bills/' + encodeURIComponent(inv), updatedBill);
-                return result;
-            } catch(e) {
-                console.error('updateBillOnServer PUT failed:', e);
-            }
-        }
-        // Offline: persist to offline storage
-        try {
-            const s = localStorage.getItem('fp_bills_offline');
-            const arr = s ? JSON.parse(s) : [];
-            const idx = arr.findIndex(b => b.inv === inv);
-            if (idx >= 0) arr[idx] = updatedBill;
-            else arr.push(updatedBill);
-            localStorage.setItem('fp_bills_offline', JSON.stringify(arr));
-        } catch(e) { console.error('updateBillOnServer offline fallback:', e); }
+        return syncWrite('PUT', '/bills/' + encodeURIComponent(inv), updatedBill);
     }
 
     /**
@@ -3570,6 +3598,9 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
     function startAutoSync() {
         setInterval(async () => {
             try {
+                // Drain any writes that failed earlier (or were made while offline)
+                // before pulling fresh state, so this cycle's data already reflects them.
+                await flushOutbox();
                 const [bills, customers, staff, expenses, inventory, activity, storeSettings, customerPayments] = await Promise.all([
                     apiGet('/bills'),
                     apiGet('/customers'),
@@ -3856,13 +3887,7 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
         }
 
         localStorage.setItem('fp_store_settings', JSON.stringify(STORE_SETTINGS));
-        if (window._serverAvailable) {
-            try {
-                await apiPut('/settings/store_settings', { value: STORE_SETTINGS });
-            } catch(e) {
-                console.error('Failed to save store settings to server', e);
-            }
-        }
+        await syncWrite('PUT', '/settings/store_settings', { value: STORE_SETTINGS });
 
         // Reflect in sidebar brand
         const brandName = document.querySelector('.brand-name');
@@ -3896,9 +3921,7 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
         const invShowPhone = document.getElementById('inv-show-phone');
         STORE_SETTINGS.showPhoneOnInvoice = invShowPhone ? invShowPhone.checked : false;
         localStorage.setItem('fp_store_settings', JSON.stringify(STORE_SETTINGS));
-        if (window._serverAvailable) {
-            apiPut('/settings/store_settings', { value: STORE_SETTINGS }).catch(e => console.error('Failed to save invoice settings', e));
-        }
+        syncWrite('PUT', '/settings/store_settings', { value: STORE_SETTINGS });
         toast('Invoice settings saved', 'check-circle');
     };
 
@@ -4432,13 +4455,7 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
         try { localStorage.setItem('fp_customer_payments', JSON.stringify(window.CUSTOMER_PAYMENTS)); } catch(e) {}
  
         // Sync customer payments to the server Settings collection
-        if (window._serverAvailable) {
-            try {
-                await apiPut('/settings/customer_payments', { value: window.CUSTOMER_PAYMENTS });
-            } catch (e) {
-                console.error('confirmPayment: failed to sync customer payments to server', e);
-            }
-        }
+        await syncWrite('PUT', '/settings/customer_payments', { value: window.CUSTOMER_PAYMENTS });
 
         // Sync updated bills back to the card element so re-opening works correctly
         if (currentCustomerCard) {
@@ -5469,7 +5486,7 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
 
     window.syncDropdownSettings = function() {
         localStorage.setItem('fp_dropdown_settings', JSON.stringify(DROPDOWN_SETTINGS));
-        if (window._serverAvailable) { try { apiPost('/settings/dropdown_settings', { value: DROPDOWN_SETTINGS }); } catch(e) {} }
+        syncWrite('PUT', '/settings/dropdown_settings', { value: DROPDOWN_SETTINGS });
     }
 
     window.deductInventoryFromBill = function(billItems) {
@@ -5497,15 +5514,11 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
             if (typeof window.renderInventoryTable === 'function') window.renderInventoryTable();
             if (typeof window.renderDashboardLowStock === 'function') window.renderDashboardLowStock();
             // Persist the new quantities to the shared database so every account sees the update
-            if (window._serverAvailable) {
-                changedItems.forEach(item => {
-                    const id = item._id || item.id;
-                    if (!id) return;
-                    apiPut('/inventory/' + id, item).catch(function(e) {
-                        console.error('Failed to sync inventory deduction to server', e);
-                    });
-                });
-            }
+            changedItems.forEach(item => {
+                const id = item._id || item.id;
+                if (!id) return;
+                syncWrite('PUT', '/inventory/' + id, item);
+            });
         }
         return deducted;
     }
@@ -5846,6 +5859,8 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
         });
         INVENTORY_ITEMS.push(newItem);
         window.saveInventoryData();
+        // Not routed through the outbox: a POST create isn't replay-safe (a retry
+        // after an ambiguous failure could create a duplicate inventory item).
         if (window._serverAvailable) {
             apiPost('/inventory', newItem).then(function(saved) {
                 if (saved && saved._id) {
@@ -5885,9 +5900,7 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
         stampRecord(item, true);
 
         window.saveInventoryData();
-        if (window._serverAvailable) {
-            apiPut('/inventory/' + id, item).catch(function(e) { console.error('Failed to sync inventory update', e); });
-        }
+        syncWrite('PUT', '/inventory/' + id, item);
         window.renderInventoryTable();
         window.renderDashboardLowStock();
         document.getElementById('modalOverlay').style.display = 'none';
@@ -5904,9 +5917,7 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
             window.saveInventoryData();
             window.renderInventoryTable();
             window.renderDashboardLowStock();
-            if (window._serverAvailable) {
-                fetchJson(API_BASE + '/inventory/' + id, { method: 'DELETE' }).catch(function(e) { console.error('Failed to sync inventory delete', e); });
-            }
+            syncWrite('DELETE', '/inventory/' + id);
             toast(`Deleted "${name}"`, 'check-circle');
             logActivity('Inventory Deleted', 'Deleted <strong>' + name + '</strong> from inventory');
         }
@@ -6838,7 +6849,7 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
         if (pmSelect) pmSelect.value = 'Credit';
         
         const paidInput = document.getElementById('gstAmountPaid');
-        if (paidInput) paidInput.value = '0';
+        if (paidInput) paidInput.value = '';
         
         initGstDates();
         
