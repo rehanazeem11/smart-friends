@@ -1120,8 +1120,9 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
             var qty = parseFloat(item.qty) || 0;
             if (qty <= 0) return;
 
-            // Determine if this is a sheet-based item
-            var isSheet = name.indexOf('sheet:') === 0 || name.indexOf('print only') === 0;
+            // Determine if this is a sheet-based item (paper sheets, print-only jobs,
+            // and stickers — stickers are also sold/priced per sheet)
+            var isSheet = name.indexOf('sheet:') === 0 || name.indexOf('print only') === 0 || name.indexOf('sticker:') === 0;
             if (!isSheet) return;
 
             // Determine OS vs FB
