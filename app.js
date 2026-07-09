@@ -3538,7 +3538,6 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
     let lastSyncHash = '';
     function startAutoSync() {
         setInterval(async () => {
-            if (!window._serverAvailable) return;
             try {
                 const [bills, customers, staff, expenses, inventory, activity, storeSettings, customerPayments] = await Promise.all([
                     apiGet('/bills'),
@@ -3551,6 +3550,12 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
                     apiGet('/settings/customer_payments').catch(() => null)
                 ]);
                 
+                if (!window._serverAvailable) {
+                    window._serverAvailable = true;
+                    console.log('Server connection restored!');
+                    lastSyncHash = ''; // Force redraw on connection restore
+                }
+
                 const currentHash = JSON.stringify({
                     bills: bills.map(b => b.inv),
                     customers: customers.map(c => ({ id: c._id || c.id, archived: c.archived })),
@@ -3610,7 +3615,10 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
                 }
                 lastSyncHash = currentHash;
             } catch(e) {
-                console.error('Error during auto-sync', e);
+                if (window._serverAvailable) {
+                    console.warn('Server connection lost during auto-sync', e);
+                    window._serverAvailable = false;
+                }
             }
         }, 3000);
     }
