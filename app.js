@@ -3561,14 +3561,14 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
                 }
 
                 const currentHash = JSON.stringify({
-                    bills: bills.map(b => b.inv),
-                    customers: customers.map(c => ({ id: c._id || c.id, archived: c.archived })),
-                    staff: staff.map(s => ({ id: s._id || s.id, active: s.active })),
-                    expenses: expenses.map(e => e._id || e.id),
-                    inventory: inventory.map(i => ({ id: i._id || i.id, qty: i.qty })),
-                    activity: activity.length,
-                    settings: storeSettings ? storeSettings.name : '',
-                    payments: customerPayments ? Object.keys(customerPayments).length : 0
+                    bills: bills.map(b => ({ inv: b.inv, updated: b.updatedAt || b.lastUpdatedAt || '' })),
+                    customers: customers.map(c => ({ id: c._id || c.id, updated: c.updatedAt || '' })),
+                    staff: staff.map(s => ({ id: s._id || s.id, updated: s.updatedAt || '' })),
+                    expenses: expenses.map(e => ({ id: e._id || e.id, updated: e.updatedAt || '' })),
+                    inventory: inventory.map(i => ({ id: i._id || i.id, qty: i.qty, updated: i.updatedAt || '' })),
+                    activity: activity.map(a => ({ id: a._id || a.id, updated: a.updatedAt || a.createdAt || '' })),
+                    settings: storeSettings ? (storeSettings.updatedAt || JSON.stringify(storeSettings)) : '',
+                    payments: customerPayments ? JSON.stringify(customerPayments) : ''
                 });
 
                 if (lastSyncHash && lastSyncHash !== currentHash) {
