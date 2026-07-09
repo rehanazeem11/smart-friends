@@ -82,7 +82,17 @@ app.put('/api/customers/:id', async (req, res) => {
 
 app.delete('/api/customers/:id', async (req, res) => {
     try {
-        await Customer.findByIdAndDelete(req.params.id);
+        const id = req.params.id;
+        if (mongoose.Types.ObjectId.isValid(id)) {
+            await Customer.findByIdAndDelete(id);
+        } else {
+            await Customer.findOneAndDelete({
+                $or: [
+                    { name: id },
+                    { phone: id }
+                ]
+            });
+        }
         res.json({ ok: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -128,6 +138,13 @@ app.post('/api/expenses', async (req, res) => {
     try {
         const expense = await Expense.create(req.body);
         res.status(201).json(expense);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.delete('/api/expenses/:id', async (req, res) => {
+    try {
+        await Expense.findByIdAndDelete(req.params.id);
+        res.json({ ok: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

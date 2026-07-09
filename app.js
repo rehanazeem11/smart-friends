@@ -2157,19 +2157,26 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
 
     async function loadServerData() {
         try {
-            const [bills, customers, staff, expenses, inventory, activity, storeSettings] = await Promise.all([
+            const [bills, customers, staff, expenses, inventory, activity, storeSettings, customerPayments] = await Promise.all([
                 apiGet('/bills'),
                 apiGet('/customers'),
                 apiGet('/staff'),
                 apiGet('/expenses'),
                 apiGet('/inventory'),
                 apiGet('/activity'),
-                apiGet('/settings/store_settings').catch(() => null)
+                apiGet('/settings/store_settings').catch(() => null),
+                apiGet('/settings/customer_payments').catch(() => null)
             ]);
             BILLS.length = 0; BILLS.push(...(Array.isArray(bills) ? bills : []));
             CUSTOMERS.length = 0; CUSTOMERS.push(...(Array.isArray(customers) ? customers : []));
             STAFF.length = 0; STAFF.push(...(Array.isArray(staff) ? staff : []));
             EXPENSE_ENTRIES.length = 0; EXPENSE_ENTRIES.push(...(Array.isArray(expenses) ? expenses : []));
+            if (customerPayments) {
+                window.CUSTOMER_PAYMENTS = customerPayments;
+            } else {
+                const stored = localStorage.getItem('fp_customer_payments');
+                if (stored) window.CUSTOMER_PAYMENTS = JSON.parse(stored);
+            }
             if (storeSettings) {
                 STORE_SETTINGS = { ...STORE_SETTINGS, ...storeSettings };
             } else {
@@ -3525,14 +3532,15 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
         setInterval(async () => {
             if (!window._serverAvailable) return;
             try {
-                const [bills, customers, staff, expenses, inventory, activity, storeSettings] = await Promise.all([
+                const [bills, customers, staff, expenses, inventory, activity, storeSettings, customerPayments] = await Promise.all([
                     apiGet('/bills'),
                     apiGet('/customers'),
                     apiGet('/staff'),
                     apiGet('/expenses'),
                     apiGet('/inventory'),
                     apiGet('/activity'),
-                    apiGet('/settings/store_settings').catch(() => null)
+                    apiGet('/settings/store_settings').catch(() => null),
+                    apiGet('/settings/customer_payments').catch(() => null)
                 ]);
                 
                 const currentHash = JSON.stringify({
@@ -3542,7 +3550,8 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
                     expenses: expenses.map(e => e._id || e.id),
                     inventory: inventory.map(i => ({ id: i._id || i.id, qty: i.qty })),
                     activity: activity.length,
-                    settings: storeSettings ? storeSettings.name : ''
+                    settings: storeSettings ? storeSettings.name : '',
+                    payments: customerPayments ? Object.keys(customerPayments).length : 0
                 });
 
                 if (lastSyncHash && lastSyncHash !== currentHash) {
@@ -3551,6 +3560,9 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
                     CUSTOMERS.length = 0; CUSTOMERS.push(...(Array.isArray(customers) ? customers : []));
                     STAFF.length = 0; STAFF.push(...(Array.isArray(staff) ? staff : []));
                     EXPENSE_ENTRIES.length = 0; EXPENSE_ENTRIES.push(...(Array.isArray(expenses) ? expenses : []));
+                    if (customerPayments) {
+                        window.CUSTOMER_PAYMENTS = customerPayments;
+                    }
                     if (storeSettings) {
                         STORE_SETTINGS = { ...STORE_SETTINGS, ...storeSettings };
                         populateSettingsUI();
@@ -3562,6 +3574,13 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
                     if (Array.isArray(activity) && activity.length) {
                         ACTIVITY_LOG.length = 0;
                         ACTIVITY_LOG.push(...activity);
+                    }
+
+                    if (currentCustomerData) {
+                        currentCustomerData.payments = window.CUSTOMER_PAYMENTS[currentCustomerData.name] || [];
+                        refreshProfileStats();
+                        renderCustomerBills();
+                        renderLedger();
                     }
 
                     renderCustomerGrid();
@@ -4424,6 +4443,15 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
         window.CUSTOMER_PAYMENTS[currentCustomerData.name].push(stampRecord({ date, amount, method: 'Cash', notes }));
         currentCustomerData.payments = window.CUSTOMER_PAYMENTS[currentCustomerData.name];
         try { localStorage.setItem('fp_customer_payments', JSON.stringify(window.CUSTOMER_PAYMENTS)); } catch(e) {}
+ 
+        // Sync customer payments to the server Settings collection
+        if (window._serverAvailable) {
+            try {
+                await apiPut('/settings/customer_payments', { value: window.CUSTOMER_PAYMENTS });
+            } catch (e) {
+                console.error('confirmPayment: failed to sync customer payments to server', e);
+            }
+        }
 
         // Sync updated bills back to the card element so re-opening works correctly
         if (currentCustomerCard) {
