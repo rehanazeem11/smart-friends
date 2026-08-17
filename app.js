@@ -605,7 +605,6 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
         }
 
         bindRowCalculatorEvents(row, cat);
-        updateRowPricing(row, cat);
     }
 
     function bindRowCalculatorEvents(row, cat) {
@@ -3344,8 +3343,6 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
                     );
                     container.appendChild(row);
                 });
-                // Always add one blank row at the end
-                container.appendChild(buildLineItemRow('', '', '', '', 'auto'));
                 updateLineItemNumbers();
             }
 
