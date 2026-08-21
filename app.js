@@ -1231,7 +1231,8 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
             if (hasCounter) type = 'Counter';
 
             const details = getBillSheetDetails(items);
-            const billObj = stampRecord({ inv: invNum, date: localDateStr(new Date()), customer: custName, phone: custPhone, shipTo, billTo, items, subtotal, gst: gstAmount, gstPercent, total, paid, status, type, printing_type: details.printing_type, sheet_quantity: details.sheet_quantity, calculated_sheet_count: details.calculated_sheet_count, calculatedSheetCount: details.calculated_sheet_count, report_type_override: 'auto', reportTypeOverride: 'auto' });
+            const billDateVal = document.getElementById('billDate')?.value || localDateStr(new Date());
+            const billObj = stampRecord({ inv: invNum, date: billDateVal, customer: custName, phone: custPhone, shipTo, billTo, items, subtotal, gst: gstAmount, gstPercent, total, paid, status, type, printing_type: details.printing_type, sheet_quantity: details.sheet_quantity, calculated_sheet_count: details.calculated_sheet_count, calculatedSheetCount: details.calculated_sheet_count, report_type_override: 'auto', reportTypeOverride: 'auto' });
 
             const itemsHtml = items.map(item => {
                 const name = item.name || '';
@@ -2381,6 +2382,7 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
             lucide.createIcons({ nodes: [tr] });
             tbody.appendChild(tr);
         });
+        if (typeof window.filterBills === 'function') window.filterBills();
     }
 
     window.deleteBill = async function(inv) {
@@ -3213,6 +3215,7 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
 
         const fields = ['custName','custPhone','shipTo','billTo','billingNotes'];
         fields.forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+        const billDateEl = document.getElementById('billDate'); if (billDateEl) billDateEl.value = localDateStr(new Date());
         const overrideSel = document.getElementById('billReportTypeOverride'); if (overrideSel) overrideSel.value = 'auto';
         const discount = document.getElementById('discountInput'); if (discount) discount.value = '0';
         // Always use the GST value from Settings (CGST + SGST) — never hardcode
@@ -3315,6 +3318,7 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
             setVal('shipTo',       liveBill.shipTo);
             setVal('billTo',       liveBill.billTo);
             setVal('billingNotes', liveBill.notes || '');
+            setVal('billDate',     liveBill.date || localDateStr(new Date()));
             setVal('discountInput', liveBill.discount || 0);
             setVal('gstInput',     liveBill.gstPercent || liveBill.gst_percent || (typeof getStoreGstInfo === 'function' ? getStoreGstInfo().percent : 18));
 
@@ -3362,7 +3366,7 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
 
     /**
      * Save an edited bill — called when generateBillBtn is clicked in edit mode.
-     * Preserves inv, date, createdBy, createdAt.
+     * Preserves inv, createdBy, createdAt. Date is editable via the Bill Date field.
      * Handles inventory: restore original → deduct updated.
      */
     async function saveEditedBill() {
@@ -3423,6 +3427,7 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
         const status = paid >= total ? 'Paid' : (paid > 0 ? 'Partial' : 'Outstanding');
 
         const details = getBillSheetDetails(items);
+        const billDateVal = document.getElementById('billDate')?.value || originalBill.date;
         // Build updated bill — preserve all original metadata
         const updatedBill = Object.assign({}, originalBill, {
             customer: custName,
@@ -3430,6 +3435,7 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
             shipTo,
             billTo,
             notes,
+            date: billDateVal,
             items,
             subtotal,
             discount,
@@ -4104,6 +4110,7 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
                 if (cells[6]) cells[6].innerHTML = getBadgeHtml(newStatus);
             }
         });
+        if (typeof window.filterBills === 'function') window.filterBills();
     }
 
     document.querySelectorAll('.bill-row').forEach(row => {
@@ -5331,6 +5338,12 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
     var _origGoto = window.goto || function(){};
     window.goto = function(pageId) {
         _origGoto(pageId);
+        // Default the Bill Date field to today when landing on the Billing page,
+        // since resetNewBillForm() only runs after certain form actions, not on nav.
+        if (pageId === 'new-bill') {
+            var billDateEl = document.getElementById('billDate');
+            if (billDateEl && !billDateEl.value) billDateEl.value = localDateStr(new Date());
+        }
         // Sync desktop nav active (already done in original goto)
         // Sync mobile nav
         var mobileBtn = document.querySelector('.mobile-nav-item[data-page="' + pageId + '"]');
@@ -5411,7 +5424,7 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
         sticker: {
             types: [
                 { key: 'pvc',         label: 'PVC',                rate: 22 },
-                { key: 'normal',      label: 'Normal Sticker',     rate: 12 },
+                { key: 'normal',      label: 'Normal Sticker',     rate: 9 },
                 { key: 'thick',       label: 'Thick Sticker',      rate: 20 },
                 { key: 'transparent', label: 'Transparent Sticker',rate: 18 },
             ]

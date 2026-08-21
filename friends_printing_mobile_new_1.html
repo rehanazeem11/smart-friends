@@ -544,7 +544,15 @@
                     <div class="space-y-5">
                         <!-- Customer & Shipping -->
                         <div class="card">
-                            <div class="section-title mb-4">Customer & Shipping</div>
+                            <div class="section-title mb-4"
+                                style="display:flex;align-items:center;justify-content:space-between;gap:16px">
+                                <span>Customer & Shipping</span>
+                                <div style="display:flex;align-items:center;gap:8px;font-family:'Plus Jakarta Sans', system-ui, sans-serif">
+                                    <label class="label" for="billDate" style="margin-bottom:0;white-space:nowrap">Bill Date</label>
+                                    <input class="input" id="billDate" type="date"
+                                        style="width:150px;padding:6px 10px;font-size:13px" />
+                                </div>
+                            </div>
                             <div class="grid grid-cols-2 gap-5">
                                 <div>
                                     <label class="label mb-1">Customer Name <span
