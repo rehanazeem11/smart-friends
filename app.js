@@ -2908,13 +2908,27 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
         } catch (e) { console.error('loadOfflineExpenses', e); }
     }
 
+    function saveOfflineBills() {
+        try {
+            localStorage.setItem('fp_bills_offline', JSON.stringify(BILLS));
+        } catch (e) { console.error('saveOfflineBills', e); }
+    }
+
     function loadOfflineBills() {
         try {
-            const s = localStorage.getItem('fp_bills_offline');
-            if (!s) return;
-            const arr = JSON.parse(s);
-            if (!Array.isArray(arr)) return;
-            arr.forEach(b => { b._offline = true; BILLS.push(b); });
+            const keys = ['fp_bills_offline', 'fp_bills', 'fp_bills_backup'];
+            keys.forEach(k => {
+                const s = localStorage.getItem(k);
+                if (!s) return;
+                const arr = JSON.parse(s);
+                if (!Array.isArray(arr)) return;
+                arr.forEach(b => {
+                    if (b && b.inv && !BILLS.find(ex => ex.inv === b.inv)) {
+                        BILLS.push(b);
+                    }
+                });
+            });
+            saveOfflineBills();
         } catch (e) { console.error('loadOfflineBills', e); }
     }
 
@@ -3574,12 +3588,6 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
     }
 
     async function initializeApp() {
-        // One-time data reset: clear any old mock/demo data from previous sessions
-        const RESET_VERSION = 'fp_reset_v3';
-        if (!localStorage.getItem(RESET_VERSION)) {
-            ['fp_inventory_items','fp_shortcut_items','fp_bills_offline','fp_expenses_offline','fp_dropdown_settings','fp_customers_offline','fp_customer_payments','fp_staff_offline','fp_activity_log'].forEach(k => localStorage.removeItem(k));
-            localStorage.setItem(RESET_VERSION, '1');
-        }
 
         await loadServerData();
         // load any locally-saved offline bills to merge with server data
