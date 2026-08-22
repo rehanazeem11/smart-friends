@@ -177,6 +177,21 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
         
         if (pageId === 'reports' && typeof generateReport === 'function') {
             generateReport();
+        } else if (pageId === 'bills' && typeof renderBills === 'function') {
+            renderBills();
+        } else if (pageId === 'customers' && typeof renderCustomerGrid === 'function') {
+            renderCustomerGrid();
+        } else if (pageId === 'staff' && typeof renderStaffGrid === 'function') {
+            renderStaffGrid();
+        } else if (pageId === 'expenses' && typeof renderExpenseTable === 'function') {
+            renderExpenseTable();
+            if (typeof renderExpensesReport === 'function') renderExpensesReport();
+        } else if (pageId === 'inventory' && typeof renderInventoryTable === 'function') {
+            renderInventoryTable();
+        } else if (pageId === 'dashboard') {
+            if (typeof renderDashboardRecentBills === 'function') renderDashboardRecentBills();
+            if (typeof updateDashboardStats === 'function') updateDashboardStats();
+            if (typeof renderDashboardLowStock === 'function') renderDashboardLowStock();
         }
         
         window.scrollTo(0,0);
@@ -2159,23 +2174,37 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
             options.headers['x-user-name'] = CURRENT_USER.name || 'Admin';
             options.headers['x-user-role'] = CURRENT_USER.role || 'admin';
         }
-        const res = await fetch(url, options);
-        const text = await res.text();
-        if (!res.ok) {
-            throw new Error(text || `${res.status} ${res.statusText}`);
+        const timeoutMs = options.timeoutMs || 4000;
+        const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+        const timeoutId = setTimeout(() => { if (controller) controller.abort(); }, timeoutMs);
+        const fetchOptions = { ...options };
+        delete fetchOptions.timeoutMs;
+        if (controller) fetchOptions.signal = controller.signal;
+        try {
+            const res = await fetch(url, fetchOptions);
+            clearTimeout(timeoutId);
+            const text = await res.text();
+            if (!res.ok) {
+                throw new Error(text || `${res.status} ${res.statusText}`);
+            }
+            try { return JSON.parse(text); } catch(e) { return text; }
+        } catch (err) {
+            clearTimeout(timeoutId);
+            throw err;
         }
-        try { return JSON.parse(text); } catch(e) { return text; }
     }
 
-    async function apiGet(path) {
-        return fetchJson(`${API_BASE}${path}`);
+    async function apiGet(path, options = {}) {
+        return fetchJson(`${API_BASE}${path}`, { timeoutMs: options.timeoutMs || 2500, ...options });
     }
 
-    async function apiPost(path, payload) {
+    async function apiPost(path, payload, options = {}) {
         return fetchJson(`${API_BASE}${path}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
+            body: JSON.stringify(payload),
+            timeoutMs: options.timeoutMs || 4000,
+            ...options
         });
     }
 
@@ -2379,14 +2408,15 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
       <td>${statusBadge}</td>
       <td class="admin-only-view" style="white-space:nowrap"><button class="btn btn-ghost p-1 rounded" title="Edit bill" onclick="event.stopPropagation();window.openEditBill('${b.inv}')"><i data-lucide="pencil" class="w-4 h-4" style="color:var(--primary)"></i></button><button class="btn btn-ghost p-1 rounded bill-delete-btn" title="Delete bill" onclick="event.stopPropagation();deleteBill('${b.inv}')"><i data-lucide="trash-2" class="w-4 h-4" style="color:var(--rose)"></i></button></td>`;
             tr.addEventListener('click', () => window.openBillDetailsByName(b.inv));
-            lucide.createIcons({ nodes: [tr] });
             tbody.appendChild(tr);
         });
+        if (typeof lucide !== 'undefined') lucide.createIcons({ nodes: [tbody] });
         if (typeof window.filterBills === 'function') window.filterBills();
     }
 
     window.deleteBill = async function(inv) {
-        if (!CURRENT_USER || CURRENT_USER.role !== 'admin') {
+        const isAdmin = !CURRENT_USER || CURRENT_USER.role === 'admin' || !document.body.classList.contains('role-staff');
+        if (!isAdmin) {
             toast('Unauthorized! Only Admin can delete bills.', 'alert-circle');
             return;
         }
@@ -2694,7 +2724,8 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
     };
 
     window.deleteExpense = async function(id) {
-        if (!CURRENT_USER || CURRENT_USER.role !== 'admin') {
+        const isAdmin = !CURRENT_USER || CURRENT_USER.role === 'admin' || !document.body.classList.contains('role-staff');
+        if (!isAdmin) {
             toast('Unauthorized! Only Admin can delete expenses.', 'alert-circle');
             return;
         }
@@ -2746,7 +2777,10 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
     }
 
     async function saveBillToServer(bill) {
-        const created = await apiPost('/bills', bill);
+        if (!window._serverAvailable) {
+            throw new Error('Server offline — saving locally');
+        }
+        const created = await apiPost('/bills', bill, { timeoutMs: 2500 });
         BILLS.push(created);
         // Immediate critical render only (bills table)
         renderBills();
@@ -2763,11 +2797,28 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
     }
 
     async function saveCustomerToServer(data) {
-        const created = await apiPost('/customers', data);
-        CUSTOMERS.push(created);
-        saveOfflineCustomers();
-        renderCustomerGrid();
-        return created;
+        if (!window._serverAvailable) {
+            if (!data.id && !data._id) data.id = 'cust_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+            CUSTOMERS.push(data);
+            saveOfflineCustomers();
+            renderCustomerGrid();
+            queueOutboxWrite('POST', '/customers', data);
+            return data;
+        }
+        try {
+            const created = await apiPost('/customers', data, { timeoutMs: 2500 });
+            CUSTOMERS.push(created);
+            saveOfflineCustomers();
+            renderCustomerGrid();
+            return created;
+        } catch(e) {
+            if (!data.id && !data._id) data.id = 'cust_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+            CUSTOMERS.push(data);
+            saveOfflineCustomers();
+            renderCustomerGrid();
+            queueOutboxWrite('POST', '/customers', data);
+            return data;
+        }
     }
 
     function saveOfflineStaff() {
@@ -2989,7 +3040,6 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
             </div>
             <button class="btn btn-primary w-full mt-4 text-sm view-profile-btn"><i data-lucide="eye" class="w-3.5 h-3.5"></i> View Profile</button>`;
         card.querySelector('.view-profile-btn')?.addEventListener('click', () => openCustomerProfile(card));
-        lucide.createIcons({ nodes: [card] });
         return card;
     }
 
@@ -3005,11 +3055,7 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
             grid.innerHTML = '<div class="text-center" style="color:var(--text-muted);grid-column:1/-1;padding:32px">No customers found.</div>';
         } else {
             filtered.forEach(c => grid.appendChild(buildCustomerCard(c)));
-            // Safety-net re-pass: the avatar and "View Profile" icons are the only
-            // visible content in their spots, so a missed per-card lucide conversion
-            // (common when many cards are built in one tight loop) reads as the icon
-            // having vanished entirely.
-            try { if (typeof lucide !== 'undefined') lucide.createIcons(); } catch (e) { console.error('lucide.createIcons global re-pass failed', e); }
+            try { if (typeof lucide !== 'undefined') lucide.createIcons({ nodes: [grid] }); } catch (e) {}
         }
 
         const customerSearch = document.getElementById('customer-search-input');
@@ -3080,7 +3126,6 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
             </div>
             ${actionsHtml}`;
 
-        try { lucide.createIcons({ nodes: [card] }); } catch (e) { console.error('lucide.createIcons failed for staff card', e); }
         card.querySelector('.staff-edit-btn')?.addEventListener('click', () => openEditStaffModal(staff));
         card.querySelector('.staff-delete-btn')?.addEventListener('click', () => deleteStaffMember(staff));
         const toggle = card.querySelector('input[type="checkbox"]');
@@ -3598,95 +3643,113 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
         }
     }
 
+    function renderActivePageViews() {
+        const activePage = document.querySelector('.page.active')?.id.replace('page-', '') || 'dashboard';
+        
+        if (activePage === 'dashboard') {
+            if (typeof renderDashboardRecentBills === 'function') renderDashboardRecentBills();
+            if (typeof updateDashboardStats === 'function') updateDashboardStats();
+            if (typeof renderDashboardLowStock === 'function') renderDashboardLowStock();
+        } else if (activePage === 'bills') {
+            renderBills();
+        } else if (activePage === 'customers') {
+            renderCustomerGrid();
+        } else if (activePage === 'staff') {
+            renderStaffGrid();
+        } else if (activePage === 'expenses') {
+            renderExpenseTable();
+            renderExpensesReport();
+        } else if (activePage === 'inventory') {
+            if (typeof renderInventoryTable === 'function') renderInventoryTable();
+        } else if (activePage === 'reports') {
+            renderReportsFromBills();
+        } else if (activePage === 'activity') {
+            renderActivityLog();
+        }
+
+        if (currentCustomerData) {
+            currentCustomerData.payments = window.CUSTOMER_PAYMENTS[currentCustomerData.name] || [];
+            refreshProfileStats();
+            renderCustomerBills();
+            renderLedger();
+        }
+
+        updateReportStaffOptions();
+        if (typeof updatePOSDatalist === 'function') updatePOSDatalist();
+        if (typeof updateCustomerSuggestions === 'function') updateCustomerSuggestions();
+    }
+
     let lastSyncHash = '';
+    let isAutoSyncing = false;
     function startAutoSync() {
-        setInterval(async () => {
+        const runCycle = async () => {
+            if (isAutoSyncing) return;
+            isAutoSyncing = true;
             try {
                 // Drain any writes that failed earlier (or were made while offline)
-                // before pulling fresh state, so this cycle's data already reflects them.
                 await flushOutbox();
+                const syncTimeout = { timeoutMs: 2500 };
                 const [bills, customers, staff, expenses, inventory, activity, storeSettings, customerPayments] = await Promise.all([
-                    apiGet('/bills'),
-                    apiGet('/customers'),
-                    apiGet('/staff'),
-                    apiGet('/expenses'),
-                    apiGet('/inventory'),
-                    apiGet('/activity'),
-                    apiGet('/settings/store_settings').catch(() => null),
-                    apiGet('/settings/customer_payments').catch(() => null)
+                    apiGet('/bills', syncTimeout).catch(() => null),
+                    apiGet('/customers', syncTimeout).catch(() => null),
+                    apiGet('/staff', syncTimeout).catch(() => null),
+                    apiGet('/expenses', syncTimeout).catch(() => null),
+                    apiGet('/inventory', syncTimeout).catch(() => null),
+                    apiGet('/activity', syncTimeout).catch(() => null),
+                    apiGet('/settings/store_settings', syncTimeout).catch(() => null),
+                    apiGet('/settings/customer_payments', syncTimeout).catch(() => null)
                 ]);
-                
-                if (!window._serverAvailable) {
+
+                const serverOk = Array.isArray(bills) || Array.isArray(customers);
+                if (serverOk && !window._serverAvailable) {
                     window._serverAvailable = true;
                     console.log('Server connection restored!');
                     lastSyncHash = ''; // Force redraw on connection restore
+                } else if (!serverOk && window._serverAvailable) {
+                    window._serverAvailable = false;
                 }
 
-                const currentHash = JSON.stringify({
-                    bills: bills.map(b => ({ inv: b.inv, updated: b.updatedAt || b.lastUpdatedAt || '' })),
-                    customers: customers.map(c => ({ id: c._id || c.id, updated: c.updatedAt || '' })),
-                    staff: staff.map(s => ({ id: s._id || s.id, updated: s.updatedAt || '' })),
-                    expenses: expenses.map(e => ({ id: e._id || e.id, updated: e.updatedAt || '' })),
-                    inventory: inventory.map(i => ({ id: i._id || i.id, qty: i.qty, updated: i.updatedAt || '' })),
-                    activity: activity.map(a => ({ id: a._id || a.id, updated: a.updatedAt || a.createdAt || '' })),
-                    settings: storeSettings ? (storeSettings.updatedAt || JSON.stringify(storeSettings)) : '',
-                    payments: customerPayments ? JSON.stringify(customerPayments) : ''
-                });
+                if (serverOk) {
+                    const currentHash = JSON.stringify({
+                        bills: (bills || []).map(b => ({ inv: b.inv, updated: b.updatedAt || b.lastUpdatedAt || '' })),
+                        customers: (customers || []).map(c => ({ id: c._id || c.id, updated: c.updatedAt || '' })),
+                        staff: (staff || []).map(s => ({ id: s._id || s.id, updated: s.updatedAt || '' })),
+                        expenses: (expenses || []).map(e => ({ id: e._id || e.id, updated: e.updatedAt || '' })),
+                        inventory: (inventory || []).map(i => ({ id: i._id || i.id, qty: i.qty, updated: i.updatedAt || '' })),
+                        activity: (activity || []).map(a => ({ id: a._id || a.id, updated: a.updatedAt || a.createdAt || '' })),
+                        settings: storeSettings ? (storeSettings.updatedAt || JSON.stringify(storeSettings)) : '',
+                        payments: customerPayments ? JSON.stringify(customerPayments) : ''
+                    });
 
-                if (lastSyncHash && lastSyncHash !== currentHash) {
-                    console.log('Change detected in auto-sync. Redrawing views...');
-                    BILLS.length = 0; BILLS.push(...(Array.isArray(bills) ? bills : []));
-                    CUSTOMERS.length = 0; CUSTOMERS.push(...(Array.isArray(customers) ? customers : []));
-                    saveOfflineCustomers();
-                    STAFF.length = 0; STAFF.push(...(Array.isArray(staff) ? staff : []));
-                    saveOfflineStaff();
-                    EXPENSE_ENTRIES.length = 0; EXPENSE_ENTRIES.push(...(Array.isArray(expenses) ? expenses : []));
-                    if (customerPayments) {
-                        window.CUSTOMER_PAYMENTS = customerPayments;
-                    }
-                    if (storeSettings) {
-                        STORE_SETTINGS = { ...STORE_SETTINGS, ...storeSettings };
-                        populateSettingsUI();
-                    }
-                    if (Array.isArray(inventory)) {
-                        INVENTORY_ITEMS.length = 0;
-                        INVENTORY_ITEMS.push(...inventory);
-                    }
-                    if (Array.isArray(activity) && activity.length) {
-                        ACTIVITY_LOG.length = 0;
-                        ACTIVITY_LOG.push(...activity);
-                    }
+                    if (lastSyncHash && lastSyncHash !== currentHash) {
+                        console.log('Change detected in auto-sync. Redrawing active views...');
+                        if (Array.isArray(bills)) { BILLS.length = 0; BILLS.push(...bills); }
+                        if (Array.isArray(customers)) { CUSTOMERS.length = 0; CUSTOMERS.push(...customers); saveOfflineCustomers(); }
+                        if (Array.isArray(staff)) { STAFF.length = 0; STAFF.push(...staff); saveOfflineStaff(); }
+                        if (Array.isArray(expenses)) { EXPENSE_ENTRIES.length = 0; EXPENSE_ENTRIES.push(...expenses); }
+                        if (customerPayments) window.CUSTOMER_PAYMENTS = customerPayments;
+                        if (storeSettings) { STORE_SETTINGS = { ...STORE_SETTINGS, ...storeSettings }; populateSettingsUI(); }
+                        if (Array.isArray(inventory)) { INVENTORY_ITEMS.length = 0; INVENTORY_ITEMS.push(...inventory); }
+                        if (Array.isArray(activity) && activity.length) { ACTIVITY_LOG.length = 0; ACTIVITY_LOG.push(...activity); }
 
-                    if (currentCustomerData) {
-                        currentCustomerData.payments = window.CUSTOMER_PAYMENTS[currentCustomerData.name] || [];
-                        refreshProfileStats();
-                        renderCustomerBills();
-                        renderLedger();
+                        renderActivePageViews();
                     }
-
-                    renderCustomerGrid();
-                    renderStaffGrid();
-                    renderBills();
-                    renderReportsFromBills();
-                    renderExpenseTable();
-                    renderExpensesReport();
-                    updateReportStaffOptions();
-                    if (typeof renderDashboardRecentBills === 'function') renderDashboardRecentBills();
-                    if (typeof updateDashboardStats === 'function') updateDashboardStats();
-                    if (typeof renderInventoryTable === 'function') renderInventoryTable();
-                    if (typeof renderDashboardLowStock === 'function') renderDashboardLowStock();
-                    if (typeof updatePOSDatalist === 'function') updatePOSDatalist();
-                    if (typeof updateCustomerSuggestions === 'function') updateCustomerSuggestions();
-                    renderActivityLog();
+                    lastSyncHash = currentHash;
                 }
-                lastSyncHash = currentHash;
             } catch(e) {
                 if (window._serverAvailable) {
                     console.warn('Server connection lost during auto-sync', e);
                     window._serverAvailable = false;
                 }
+            } finally {
+                isAutoSyncing = false;
+                const nextInterval = window._serverAvailable ? 5000 : 10000;
+                setTimeout(runCycle, nextInterval);
             }
-        }, 3000);
+        };
+
+        // Delay initial auto-sync cycle by 1 second to allow app initialization
+        setTimeout(runCycle, 1000);
     }
 
     initializeApp();
