@@ -2293,53 +2293,71 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
     window._serverAvailable = false;
 
     async function loadServerData() {
-        try {
-            const [bills, customers, staff, expenses, inventory, activity, storeSettings, customerPayments] = await Promise.all([
-                apiGet('/bills'),
-                apiGet('/customers'),
-                apiGet('/staff'),
-                apiGet('/expenses'),
-                apiGet('/inventory'),
-                apiGet('/activity'),
-                apiGet('/settings/store_settings').catch(() => null),
-                apiGet('/settings/customer_payments').catch(() => null)
-            ]);
-            BILLS.length = 0; BILLS.push(...(Array.isArray(bills) ? bills : []));
-            CUSTOMERS.length = 0; CUSTOMERS.push(...(Array.isArray(customers) ? customers : []));
+        // Each endpoint is fetched and caught independently so one slow/failed
+        // request (bills is usually the largest payload) can't blank out the
+        // others or force the whole app into offline mode.
+        const [bills, customers, staff, expenses, inventory, activity, storeSettings, customerPayments] = await Promise.all([
+            apiGet('/bills').catch(e => { console.warn('Failed to load bills', e); return undefined; }),
+            apiGet('/customers').catch(e => { console.warn('Failed to load customers', e); return undefined; }),
+            apiGet('/staff').catch(e => { console.warn('Failed to load staff', e); return undefined; }),
+            apiGet('/expenses').catch(e => { console.warn('Failed to load expenses', e); return undefined; }),
+            apiGet('/inventory').catch(e => { console.warn('Failed to load inventory', e); return undefined; }),
+            apiGet('/activity').catch(e => { console.warn('Failed to load activity', e); return undefined; }),
+            apiGet('/settings/store_settings').catch(() => undefined),
+            apiGet('/settings/customer_payments').catch(() => undefined)
+        ]);
+
+        let anySucceeded = false;
+
+        if (Array.isArray(bills)) {
+            BILLS.length = 0; BILLS.push(...bills);
+            anySucceeded = true;
+        }
+        if (Array.isArray(customers)) {
+            CUSTOMERS.length = 0; CUSTOMERS.push(...customers);
             saveOfflineCustomers();
-            STAFF.length = 0; STAFF.push(...(Array.isArray(staff) ? staff : []));
+            anySucceeded = true;
+        }
+        if (Array.isArray(staff)) {
+            STAFF.length = 0; STAFF.push(...staff);
             saveOfflineStaff();
-            EXPENSE_ENTRIES.length = 0; EXPENSE_ENTRIES.push(...(Array.isArray(expenses) ? expenses : []));
-            if (customerPayments) {
-                window.CUSTOMER_PAYMENTS = customerPayments;
-            } else {
-                const stored = localStorage.getItem('fp_customer_payments');
-                if (stored) window.CUSTOMER_PAYMENTS = JSON.parse(stored);
-            }
-            if (storeSettings) {
-                STORE_SETTINGS = { ...STORE_SETTINGS, ...storeSettings };
-            } else {
-                const stored = localStorage.getItem('fp_store_settings');
-                if (stored) STORE_SETTINGS = { ...STORE_SETTINGS, ...JSON.parse(stored) };
-            }
-            if (Array.isArray(inventory)) {
-                INVENTORY_ITEMS.length = 0;
-                INVENTORY_ITEMS.push(...inventory);
-                if (typeof window.saveInventoryData === 'function') window.saveInventoryData();
-            }
-            if (Array.isArray(activity) && activity.length) {
-                ACTIVITY_LOG.length = 0;
-                ACTIVITY_LOG.push(...activity);
-            }
-            window._serverAvailable = true;
-            populateSettingsUI();
-        } catch (e) {
-            console.error('Unable to load server data — using offline mode', e);
-            window._serverAvailable = false;
+            anySucceeded = true;
+        }
+        if (Array.isArray(expenses)) {
+            EXPENSE_ENTRIES.length = 0; EXPENSE_ENTRIES.push(...expenses);
+            anySucceeded = true;
+        }
+        if (customerPayments) {
+            window.CUSTOMER_PAYMENTS = customerPayments;
+            anySucceeded = true;
+        } else {
+            const stored = localStorage.getItem('fp_customer_payments');
+            if (stored) window.CUSTOMER_PAYMENTS = JSON.parse(stored);
+        }
+        if (storeSettings) {
+            STORE_SETTINGS = { ...STORE_SETTINGS, ...storeSettings };
+            anySucceeded = true;
+        } else {
             const stored = localStorage.getItem('fp_store_settings');
             if (stored) STORE_SETTINGS = { ...STORE_SETTINGS, ...JSON.parse(stored) };
-            populateSettingsUI();
         }
+        if (Array.isArray(inventory)) {
+            INVENTORY_ITEMS.length = 0;
+            INVENTORY_ITEMS.push(...inventory);
+            if (typeof window.saveInventoryData === 'function') window.saveInventoryData();
+            anySucceeded = true;
+        }
+        if (Array.isArray(activity) && activity.length) {
+            ACTIVITY_LOG.length = 0;
+            ACTIVITY_LOG.push(...activity);
+            anySucceeded = true;
+        }
+
+        window._serverAvailable = anySucceeded;
+        if (!anySucceeded) {
+            console.error('Unable to reach server on any endpoint — using offline mode');
+        }
+        populateSettingsUI();
     }
 
     function populateSettingsUI() {
