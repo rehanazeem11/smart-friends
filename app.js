@@ -2297,7 +2297,10 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
         // request (bills is usually the largest payload) can't blank out the
         // others or force the whole app into offline mode.
         const [bills, customers, staff, expenses, inventory, activity, storeSettings, customerPayments] = await Promise.all([
-            apiGet('/bills').catch(e => { console.warn('Failed to load bills', e); return undefined; }),
+            // Bills is usually the largest payload, so it gets a longer timeout
+            // than the shared 2500ms default — otherwise it's the endpoint most
+            // likely to trip the abort and disappear from the app.
+            apiGet('/bills', { timeoutMs: 12000 }).catch(e => { console.warn('Failed to load bills', e); return undefined; }),
             apiGet('/customers').catch(e => { console.warn('Failed to load customers', e); return undefined; }),
             apiGet('/staff').catch(e => { console.warn('Failed to load staff', e); return undefined; }),
             apiGet('/expenses').catch(e => { console.warn('Failed to load expenses', e); return undefined; }),
@@ -3715,8 +3718,11 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
                 // Drain any writes that failed earlier (or were made while offline)
                 await flushOutbox();
                 const syncTimeout = { timeoutMs: 2500 };
+                // Bills is usually the largest payload, so it gets a longer
+                // timeout than the other endpoints' shared 2500ms budget.
+                const billsTimeout = { timeoutMs: 12000 };
                 const [bills, customers, staff, expenses, inventory, activity, storeSettings, customerPayments] = await Promise.all([
-                    apiGet('/bills', syncTimeout).catch(() => null),
+                    apiGet('/bills', billsTimeout).catch(() => null),
                     apiGet('/customers', syncTimeout).catch(() => null),
                     apiGet('/staff', syncTimeout).catch(() => null),
                     apiGet('/expenses', syncTimeout).catch(() => null),
