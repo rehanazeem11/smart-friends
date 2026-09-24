@@ -9,8 +9,9 @@ const mongoose = require('mongoose');
 const Settings = require('../models/Settings');
 const Payment = require('../models/Payment');
 
+const crypto = require('crypto');
 function migrationId(customerName, index) {
-    return 'migrate_' + Buffer.from(customerName).toString('base64').replace(/[^A-Za-z0-9]/g, '').slice(0, 24) + '_' + index;
+    return 'migrate_' + crypto.createHash('sha1').update(customerName).digest('hex') + '_' + index;
 }
 
 async function run() {
