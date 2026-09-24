@@ -82,33 +82,23 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
         }
     }
 
-    function fillDemo(email, password) {
-        const emailInput = document.getElementById('emailInput');
-        const passwordInput = document.getElementById('passwordInput');
-        if (emailInput) emailInput.value = email;
-        if (passwordInput) passwordInput.value = password;
+    async function loginSuccess(user) {
         clearLoginAlerts();
-    }
+        CURRENT_USER = user;
+        sessionExpiredHandled = false;
 
-    function loginSuccess(role, staffData) {
-        clearLoginAlerts();
-        CURRENT_USER = {
-            name: (staffData && staffData.name) ? staffData.name : 'Admin',
-            email: (staffData && staffData.email) ? staffData.email : 'admin@printshop.com',
-            role: role
-        };
-        localStorage.setItem('fp_current_user', JSON.stringify(CURRENT_USER));
+        await loadAppData();
 
-        setRole(role, null, staffData);
+        setRole(user.role, null, user);
         document.body.classList.remove('logged-out');
         document.getElementById('page-login').style.display = 'none';
         document.getElementById('appShell').style.display = 'flex';
-        
+
         const activePage = localStorage.getItem('fp_active_page') || 'dashboard';
         goto(activePage);
     }
 
-    function handleLogin() {
+    async function handleLogin() {
         const email = document.getElementById('emailInput')?.value.trim();
         const password = document.getElementById('passwordInput')?.value || '';
         clearLoginAlerts();
@@ -116,30 +106,23 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
         if (!password) { showLoginError('Please enter your password'); return; }
 
         setLoginBusy(true);
-        setTimeout(() => {
-            const normalized = email.toLowerCase();
-            const isAdmin = normalized === 'admin@printshop.com' && password === 'admin123';
-            // Check dynamic staff accounts from STAFF array
-            const staffMatch = STAFF.find(s => s.email && s.email.toLowerCase() === normalized && s.password === password && s.active !== false);
-            if (!isAdmin && !staffMatch) {
-                showLoginError('Invalid credentials. Please check your email and password.');
-                setLoginBusy(false);
-                return;
-            }
-            if (staffMatch && staffMatch.role === 'admin') {
-                loginSuccess('admin', staffMatch);
-            } else {
-                loginSuccess(staffMatch ? 'staff' : 'admin', staffMatch || null);
-            }
-            logActivity('Login', (CURRENT_USER ? CURRENT_USER.name : 'Admin') + ' logged in as ' + (CURRENT_USER ? CURRENT_USER.role : 'admin'));
+        try {
+            const user = await apiPost('/login', { email, password });
+            await loginSuccess(user);
+            logActivity('Login', user.name + ' logged in as ' + user.role);
+        } catch (e) {
+            let message = 'Invalid credentials. Please check your email and password.';
+            try { const parsed = JSON.parse(e.message); if (parsed && parsed.error) message = parsed.error; } catch (_) {}
+            showLoginError(message);
+        } finally {
             setLoginBusy(false);
-        }, 220);
+        }
     }
 
-    function logout() {
+    async function logout() {
         logActivity('Logout', (CURRENT_USER ? CURRENT_USER.name : 'User') + ' logged out');
+        try { await apiPost('/logout', {}); } catch (e) {}
         CURRENT_USER = null;
-        localStorage.removeItem('fp_current_user');
         localStorage.removeItem('fp_active_page');
         document.getElementById('appShell').style.display = 'none';
         document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
@@ -157,6 +140,27 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
         if (emailInput) { emailInput.value = ''; emailInput.focus(); }
         const passwordInput = document.getElementById('passwordInput');
         if (passwordInput) passwordInput.value = '';
+    }
+
+    // A 401 from any API call while CURRENT_USER is set means the session
+    // expired or was revoked — reset straight to the login screen rather than
+    // leaving the app stuck (and without treating it as a network/offline issue).
+    let sessionExpiredHandled = false;
+    function handleSessionExpired() {
+        if (sessionExpiredHandled) return;
+        sessionExpiredHandled = true;
+        CURRENT_USER = null;
+        document.getElementById('appShell').style.display = 'none';
+        document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+        const loginPage = document.getElementById('page-login');
+        if (loginPage) {
+            loginPage.style.display = '';
+            loginPage.classList.add('active');
+        }
+        document.body.classList.remove('role-staff');
+        document.body.classList.add('role-admin', 'logged-out');
+        document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+        showLoginError('Your session has expired. Please log in again.');
     }
 
     /* ============================================================
@@ -285,12 +289,39 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
        NEW BILL — line item helpers
     ============================================================ */
     let SHORTCUT_ITEMS = {};
-    function loadShortcutItems() {
+    async function loadShortcutItems() {
+        // On the very first call (immediately below, at script startup) apiGet
+        // isn't usable yet — API_BASE hasn't been declared — so this rejects
+        // and falls straight through to the localStorage branch. The real
+        // server fetch happens on the later call from loadAppData(), once login
+        // has completed.
+        let remote = null;
+        let fetchSucceeded = false;
+        try {
+            remote = await apiGet('/settings/shortcut_items');
+            fetchSucceeded = true;
+        } catch (e) {
+            fetchSucceeded = false;
+        }
+
+        if (remote && typeof remote === 'object' && Object.keys(remote).length) {
+            SHORTCUT_ITEMS = remote;
+            localStorage.setItem('fp_shortcut_items', JSON.stringify(SHORTCUT_ITEMS));
+            return;
+        }
+
         const stored = localStorage.getItem('fp_shortcut_items');
         if (stored) {
-            try { SHORTCUT_ITEMS = JSON.parse(stored); return; } catch(e) {}
+            try { SHORTCUT_ITEMS = JSON.parse(stored); } catch(e) { SHORTCUT_ITEMS = {}; }
+        } else {
+            SHORTCUT_ITEMS = {};
         }
-        SHORTCUT_ITEMS = {};
+
+        // Server had nothing yet but this browser already has presets saved
+        // locally — push them up once so other devices/browsers see them too.
+        if (fetchSucceeded && Object.keys(SHORTCUT_ITEMS).length) {
+            syncWrite('PUT', '/settings/shortcut_items', { value: SHORTCUT_ITEMS });
+        }
     }
     loadShortcutItems();
 
@@ -1202,7 +1233,9 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
             const shipTo = document.getElementById('shipTo')?.value?.trim();
             const billTo = document.getElementById('billTo')?.value?.trim();
             if (!custName) { toast('Please enter customer name', 'alert-circle'); return; }
+            // Just a preview — the server always assigns the real invoice number on save.
             let invNum = window.getNextNormalInvoiceNo();
+            const clientRequestId = newBillClientRequestId;
 
 
             const items = [];
@@ -1247,7 +1280,7 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
 
             const details = getBillSheetDetails(items);
             const billDateVal = document.getElementById('billDate')?.value || localDateStr(new Date());
-            const billObj = stampRecord({ inv: invNum, date: billDateVal, customer: custName, phone: custPhone, shipTo, billTo, items, subtotal, gst: gstAmount, gstPercent, total, paid, status, type, printing_type: details.printing_type, sheet_quantity: details.sheet_quantity, calculated_sheet_count: details.calculated_sheet_count, calculatedSheetCount: details.calculated_sheet_count, report_type_override: 'auto', reportTypeOverride: 'auto' });
+            const billObj = stampRecord({ inv: invNum, clientRequestId, date: billDateVal, customer: custName, phone: custPhone, shipTo, billTo, items, subtotal, gst: gstAmount, gstPercent, total, paid, status, type, printing_type: details.printing_type, sheet_quantity: details.sheet_quantity, calculated_sheet_count: details.calculated_sheet_count, calculatedSheetCount: details.calculated_sheet_count, report_type_override: 'auto', reportTypeOverride: 'auto' });
 
             const itemsHtml = items.map(item => {
                 const name = item.name || '';
@@ -1300,17 +1333,19 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
                 logActivity('Bill Created', 'Generated <span class="font-mono font-bold" style="color:var(--primary)">' + invNum + '</span> for ' + custName + ' · ₹ ' + Math.round(total).toLocaleString('en-IN'));
             } catch (e) {
                 console.error('saveBillToServer failed:', e);
-                // Fallback: save locally so user can continue working offline
+                // Fallback: save locally and queue for retry so it reaches the
+                // server (with its real invoice number) once reconnected
                 try {
                     billObj._offline = true;
                     addBill(billObj);
+                    queueOutboxWrite('POST', '/bills', billObj);
                     if (typeof window.deductInventoryFromBill === 'function') window.deductInventoryFromBill(items);
                     resetNewBillForm();
                     openModal(`
                         <div class="font-serif text-2xl font-bold mb-1">Bill Generated (Offline)</div>
                         <div class="text-sm mb-5" style="color:var(--text-muted)">Saved locally because the backend is unavailable.</div>
                         <div style="background:var(--surface-tint);border:1px solid var(--border);border-radius:14px;padding:18px;margin-bottom:20px">
-                            <div class="flex justify-between mb-2"><span style="color:var(--text-muted)">Invoice #</span><span class="font-mono font-bold" style="color:var(--primary)">${invNum}</span></div>
+                            <div class="flex justify-between mb-2"><span style="color:var(--text-muted)">Invoice # <span style="font-weight:400">(provisional, pending sync)</span></span><span class="font-mono font-bold" style="color:var(--primary)">${invNum}</span></div>
                             <div class="flex justify-between mb-2"><span style="color:var(--text-muted)">Customer</span><span class="font-semibold">${custName}</span></div>
                             <div class="flex justify-between mb-2"><span style="color:var(--text-muted)">Contact</span><span class="font-mono">${custPhone||'—'}</span></div>
                             <div class="flex justify-between mb-2"><span style="color:var(--text-muted)">Ship To</span><span class="font-mono">${shipTo||'—'}</span></div>
@@ -2048,6 +2083,32 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
             : '/api';
     let CURRENT_USER = null;
 
+    // Idempotency key for a create request — lets the server recognize a retried
+    // POST (flaky network, offline-outbox replay) and return the original record
+    // instead of creating a duplicate.
+    function generateClientRequestId() {
+        if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+        return 'cr_' + Date.now() + '_' + Math.random().toString(36).slice(2, 11);
+    }
+    // Regenerated whenever each bill form is reset/opened fresh (see
+    // resetNewBillForm / resetGstInvoiceForm) so every create attempt carries
+    // its own idempotency key.
+    let newBillClientRequestId = generateClientRequestId();
+    let gstBillClientRequestId = generateClientRequestId();
+
+    // Payments now live server-side as individual /api/payments documents
+    // (one per record, not one shared map) — group them back into the
+    // { customerName: [payments...] } shape the rest of the app expects.
+    function groupPaymentsByCustomer(payments) {
+        const map = {};
+        (payments || []).forEach(p => {
+            if (!p || !p.customerName) return;
+            if (!map[p.customerName]) map[p.customerName] = [];
+            map[p.customerName].push(p);
+        });
+        return map;
+    }
+
     function stampRecord(obj, isUpdate) {
         var now = localDateStr(new Date());
         var time = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
@@ -2177,15 +2238,23 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
         const timeoutMs = options.timeoutMs || 4000;
         const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
         const timeoutId = setTimeout(() => { if (controller) controller.abort(); }, timeoutMs);
-        const fetchOptions = { ...options };
+        const fetchOptions = { ...options, credentials: 'include' };
         delete fetchOptions.timeoutMs;
         if (controller) fetchOptions.signal = controller.signal;
         try {
             const res = await fetch(url, fetchOptions);
             clearTimeout(timeoutId);
+            // A 401 while we believed we had a session means it expired or was
+            // revoked server-side — bounce to the login screen instead of letting
+            // callers mistake this for the server being unreachable.
+            if (res.status === 401 && CURRENT_USER) {
+                handleSessionExpired();
+            }
             const text = await res.text();
             if (!res.ok) {
-                throw new Error(text || `${res.status} ${res.statusText}`);
+                const err = new Error(text || `${res.status} ${res.statusText}`);
+                err.status = res.status;
+                throw err;
             }
             try { return JSON.parse(text); } catch(e) { return text; }
         } catch (err) {
@@ -2275,11 +2344,25 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
         let syncedCount = 0;
         for (const entry of outbox) {
             try {
-                await fetchJson(`${API_BASE}${entry.path}`, {
+                const result = await fetchJson(`${API_BASE}${entry.path}`, {
                     method: entry.method,
                     headers: { 'Content-Type': 'application/json' },
                     body: entry.body !== null ? JSON.stringify(entry.body) : undefined
                 });
+                // A bill created while offline is stamped with a locally-guessed
+                // invoice number. Now that it actually landed, swap that
+                // provisional number for the real server-assigned one so print/
+                // PDF/share and the bills list reference the authoritative bill.
+                if (entry.method === 'POST' && entry.path === '/bills' && result && result.inv) {
+                    const crid = entry.body && entry.body.clientRequestId;
+                    const local = crid ? BILLS.find(b => b.clientRequestId === crid) : null;
+                    if (local) {
+                        Object.assign(local, result);
+                        delete local._offline;
+                        try { localStorage.setItem('fp_bills_offline', JSON.stringify(BILLS.filter(b => b._offline))); } catch(e) {}
+                        if (typeof renderBills === 'function') renderBills();
+                    }
+                }
                 syncedCount++;
             } catch (e) {
                 remaining.push(entry);
@@ -2296,7 +2379,7 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
         // Each endpoint is fetched and caught independently so one slow/failed
         // request (bills is usually the largest payload) can't blank out the
         // others or force the whole app into offline mode.
-        const [bills, customers, staff, expenses, inventory, activity, storeSettings, customerPayments] = await Promise.all([
+        const [bills, customers, staff, expenses, inventory, activity, storeSettings, payments] = await Promise.all([
             // Bills is usually the largest payload, so it gets a longer timeout
             // than the shared 2500ms default — otherwise it's the endpoint most
             // likely to trip the abort and disappear from the app.
@@ -2307,7 +2390,7 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
             apiGet('/inventory').catch(e => { console.warn('Failed to load inventory', e); return undefined; }),
             apiGet('/activity').catch(e => { console.warn('Failed to load activity', e); return undefined; }),
             apiGet('/settings/store_settings').catch(() => undefined),
-            apiGet('/settings/customer_payments').catch(() => undefined)
+            apiGet('/payments').catch(e => { console.warn('Failed to load payments', e); return undefined; })
         ]);
 
         let anySucceeded = false;
@@ -2330,8 +2413,9 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
             EXPENSE_ENTRIES.length = 0; EXPENSE_ENTRIES.push(...expenses);
             anySucceeded = true;
         }
-        if (customerPayments) {
-            window.CUSTOMER_PAYMENTS = customerPayments;
+        if (Array.isArray(payments)) {
+            window.CUSTOMER_PAYMENTS = groupPaymentsByCustomer(payments);
+            try { localStorage.setItem('fp_customer_payments', JSON.stringify(window.CUSTOMER_PAYMENTS)); } catch(e) {}
             anySucceeded = true;
         } else {
             const stored = localStorage.getItem('fp_customer_payments');
@@ -3285,6 +3369,8 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
     function resetNewBillForm() {
         // Clear edit mode state
         EDIT_BILL_ID = null;
+        // Fresh idempotency key for the next create attempt
+        newBillClientRequestId = generateClientRequestId();
         const genBtn = document.getElementById('generateBillBtn');
         if (genBtn) {
             genBtn.innerHTML = '<i data-lucide="save" class="w-5 h-5"></i> Generate Bill';
@@ -3608,8 +3694,11 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
         toast('Bill ' + savedInv + ' updated', 'check-circle');
     }
 
-    async function initializeApp() {
-
+    // Loads server + offline-cached data and renders every view. Shared by
+    // initializeApp (session restored via a still-valid cookie) and
+    // loginSuccess (fresh interactive login) so both paths populate the app
+    // the same way.
+    async function loadAppData() {
         await loadServerData();
         // load any locally-saved offline bills to merge with server data
         loadOfflineBills();
@@ -3626,10 +3715,10 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
         renderExpenseTable();
         renderExpensesReport();
         updateReportStaffOptions();
-        
+
         // Load settings and inventory data
-        if (typeof loadShortcutItems === 'function') loadShortcutItems();
-        if (typeof loadDropdownSettings === 'function') loadDropdownSettings();
+        if (typeof loadShortcutItems === 'function') await loadShortcutItems();
+        if (typeof loadDropdownSettings === 'function') await loadDropdownSettings();
         if (typeof updateGstUnitsDatalist === 'function') updateGstUnitsDatalist();
         if (typeof loadInventoryData === 'function') loadInventoryData();
         if (typeof renderDashboardRecentBills === 'function') renderDashboardRecentBills(); if (typeof updateDashboardStats === 'function') updateDashboardStats();
@@ -3638,38 +3727,25 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
         if (typeof updatePOSDatalist === 'function') updatePOSDatalist();
         if (typeof updateCustomerSuggestions === 'function') updateCustomerSuggestions();
         renderActivityLog();
+    }
 
-        // Restore user session and active page from localStorage
-        const savedUser = localStorage.getItem('fp_current_user');
-        if (savedUser) {
-            try {
-                const user = JSON.parse(savedUser);
-                CURRENT_USER = user;
-                setRole(user.role, null, user);
-                document.body.classList.remove('logged-out');
-                const loginPage = document.getElementById('page-login');
-                if (loginPage) loginPage.style.display = 'none';
-                const appShell = document.getElementById('appShell');
-                if (appShell) appShell.style.display = 'flex';
-                
-                const activePage = localStorage.getItem('fp_active_page') || 'dashboard';
-                goto(activePage);
-            } catch(e) {
-                console.error('Failed to restore user session', e);
-            }
+    async function initializeApp() {
+        // Restore the session from the httpOnly auth cookie, if still valid,
+        // instead of trusting anything client-side. No cookie / an expired
+        // one means GET /api/me 401s and the login page (shown by default) stays up.
+        let user = null;
+        try {
+            user = await apiGet('/me', { timeoutMs: 5000 });
+        } catch (e) {
+            user = null;
         }
 
-        // Start 3-second auto-sync polling loop
+        if (user) {
+            await loginSuccess(user);
+        }
+
+        // Start auto-sync polling loop
         startAutoSync();
-
-        // Auto-login utility for testing and subagent runs
-        const urlParams = new URLSearchParams(window.location.search);
-        if (urlParams.get('autologin') === 'true') {
-            setTimeout(() => {
-                loginSuccess('admin', null);
-                goto('gst-billing');
-            }, 300);
-        }
     }
 
     function renderActivePageViews() {
@@ -3711,8 +3787,30 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
     let lastSyncHash = '';
     let isAutoSyncing = false;
     function startAutoSync() {
+        // Tracked so visibilitychange can trigger an immediate cycle without
+        // leaving the previously-scheduled one to also fire later and spawn a
+        // second, parallel polling chain.
+        let pendingTimer = null;
+        const scheduleNext = (delay) => {
+            if (pendingTimer) clearTimeout(pendingTimer);
+            pendingTimer = setTimeout(runCycle, delay);
+        };
+
         const runCycle = async () => {
             if (isAutoSyncing) return;
+            // Nothing to sync while logged out — and every /api/* call would
+            // just 401 — so skip the cycle entirely until a session exists.
+            if (!CURRENT_USER) {
+                scheduleNext(10000);
+                return;
+            }
+            // Skip while the tab is in the background — nothing is watching it,
+            // and it just burns battery/data. visibilitychange (below) runs a
+            // cycle immediately when the tab comes back, so nothing is missed.
+            if (document.hidden) {
+                scheduleNext(20000);
+                return;
+            }
             isAutoSyncing = true;
             try {
                 // Drain any writes that failed earlier (or were made while offline)
@@ -3721,7 +3819,7 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
                 // Bills is usually the largest payload, so it gets a longer
                 // timeout than the other endpoints' shared 2500ms budget.
                 const billsTimeout = { timeoutMs: 12000 };
-                const [bills, customers, staff, expenses, inventory, activity, storeSettings, customerPayments] = await Promise.all([
+                const [bills, customers, staff, expenses, inventory, activity, storeSettings, payments] = await Promise.all([
                     apiGet('/bills', billsTimeout).catch(() => null),
                     apiGet('/customers', syncTimeout).catch(() => null),
                     apiGet('/staff', syncTimeout).catch(() => null),
@@ -3729,7 +3827,7 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
                     apiGet('/inventory', syncTimeout).catch(() => null),
                     apiGet('/activity', syncTimeout).catch(() => null),
                     apiGet('/settings/store_settings', syncTimeout).catch(() => null),
-                    apiGet('/settings/customer_payments', syncTimeout).catch(() => null)
+                    apiGet('/payments', syncTimeout).catch(() => null)
                 ]);
 
                 const serverOk = Array.isArray(bills) || Array.isArray(customers);
@@ -3750,7 +3848,7 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
                         inventory: (inventory || []).map(i => ({ id: i._id || i.id, qty: i.qty, updated: i.updatedAt || '' })),
                         activity: (activity || []).map(a => ({ id: a._id || a.id, updated: a.updatedAt || a.createdAt || '' })),
                         settings: storeSettings ? (storeSettings.updatedAt || JSON.stringify(storeSettings)) : '',
-                        payments: customerPayments ? JSON.stringify(customerPayments) : ''
+                        payments: (payments || []).map(p => ({ id: p._id || p.id, updated: p.updatedAt || '' }))
                     });
 
                     if (lastSyncHash && lastSyncHash !== currentHash) {
@@ -3759,7 +3857,10 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
                         if (Array.isArray(customers)) { CUSTOMERS.length = 0; CUSTOMERS.push(...customers); saveOfflineCustomers(); }
                         if (Array.isArray(staff)) { STAFF.length = 0; STAFF.push(...staff); saveOfflineStaff(); }
                         if (Array.isArray(expenses)) { EXPENSE_ENTRIES.length = 0; EXPENSE_ENTRIES.push(...expenses); }
-                        if (customerPayments) window.CUSTOMER_PAYMENTS = customerPayments;
+                        if (Array.isArray(payments)) {
+                            window.CUSTOMER_PAYMENTS = groupPaymentsByCustomer(payments);
+                            try { localStorage.setItem('fp_customer_payments', JSON.stringify(window.CUSTOMER_PAYMENTS)); } catch(e) {}
+                        }
                         if (storeSettings) { STORE_SETTINGS = { ...STORE_SETTINGS, ...storeSettings }; populateSettingsUI(); }
                         if (Array.isArray(inventory)) { INVENTORY_ITEMS.length = 0; INVENTORY_ITEMS.push(...inventory); }
                         if (Array.isArray(activity) && activity.length) { ACTIVITY_LOG.length = 0; ACTIVITY_LOG.push(...activity); }
@@ -3775,13 +3876,19 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
                 }
             } finally {
                 isAutoSyncing = false;
-                const nextInterval = window._serverAvailable ? 5000 : 10000;
-                setTimeout(runCycle, nextInterval);
+                const nextInterval = window._serverAvailable ? 20000 : 10000;
+                scheduleNext(nextInterval);
             }
         };
 
+        // Run a cycle right away when the tab regains visibility, instead of
+        // waiting out whatever's left of the current interval.
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) runCycle();
+        });
+
         // Delay initial auto-sync cycle by 1 second to allow app initialization
-        setTimeout(runCycle, 1000);
+        scheduleNext(1000);
     }
 
     initializeApp();
@@ -4548,14 +4655,20 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
             remaining -= toAlloc;
         });
 
-        // Record the payment
+        // Record the payment as its own record (not the whole customer-payments
+        // map, so two windows recording payments at once don't clobber each other)
+        const paymentRecord = stampRecord({
+            customerName: currentCustomerData.name,
+            date, amount, method: 'Cash', notes,
+            clientRequestId: generateClientRequestId()
+        });
         if (!window.CUSTOMER_PAYMENTS[currentCustomerData.name]) window.CUSTOMER_PAYMENTS[currentCustomerData.name] = [];
-        window.CUSTOMER_PAYMENTS[currentCustomerData.name].push(stampRecord({ date, amount, method: 'Cash', notes }));
+        window.CUSTOMER_PAYMENTS[currentCustomerData.name].push(paymentRecord);
         currentCustomerData.payments = window.CUSTOMER_PAYMENTS[currentCustomerData.name];
         try { localStorage.setItem('fp_customer_payments', JSON.stringify(window.CUSTOMER_PAYMENTS)); } catch(e) {}
- 
-        // Sync customer payments to the server Settings collection
-        await syncWrite('PUT', '/settings/customer_payments', { value: window.CUSTOMER_PAYMENTS });
+
+        const createdPayment = await syncWrite('POST', '/payments', paymentRecord);
+        if (createdPayment && createdPayment._id) Object.assign(paymentRecord, createdPayment);
 
         // Sync updated bills back to the card element so re-opening works correctly
         if (currentCustomerCard) {
@@ -5583,7 +5696,17 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
         localStorage.setItem('fp_inventory_items', JSON.stringify(INVENTORY_ITEMS));
     }
 
-    window.loadDropdownSettings = function() {
+    window.loadDropdownSettings = async function() {
+        try {
+            const remote = await apiGet('/settings/dropdown_settings');
+            if (remote && typeof remote === 'object' && Object.keys(remote).length) {
+                DROPDOWN_SETTINGS = remote;
+                localStorage.setItem('fp_dropdown_settings', JSON.stringify(DROPDOWN_SETTINGS));
+                return;
+            }
+        } catch (e) {
+            // fall through to localStorage
+        }
         const stored = localStorage.getItem('fp_dropdown_settings');
         if (stored) {
             try { DROPDOWN_SETTINGS = JSON.parse(stored); } catch(e) {}
@@ -6092,7 +6215,8 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
         
         SHORTCUT_ITEMS[key] = { desc, price, unit };
         localStorage.setItem('fp_shortcut_items', JSON.stringify(SHORTCUT_ITEMS));
-        
+        syncWrite('PUT', '/settings/shortcut_items', { value: SHORTCUT_ITEMS });
+
         window.updatePOSDatalist();
         window.renderSettingsShortcuts();
         document.getElementById('modalOverlay').style.display = 'none';
@@ -6103,6 +6227,7 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
         if (confirm(`Delete shortcut code "${key}"?`)) {
             delete SHORTCUT_ITEMS[key];
             localStorage.setItem('fp_shortcut_items', JSON.stringify(SHORTCUT_ITEMS));
+            syncWrite('PUT', '/settings/shortcut_items', { value: SHORTCUT_ITEMS });
             window.updatePOSDatalist();
             window.renderSettingsShortcuts();
             toast(`Shortcut "${key}" deleted`, 'check-circle');
@@ -6922,6 +7047,8 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
 
     // Reset Form
     window.resetGstInvoiceForm = function() {
+        // Fresh idempotency key for the next create attempt
+        gstBillClientRequestId = generateClientRequestId();
         const fields = [
             'gstBuyerCompany', 'gstBuyerName', 'gstBuyerGSTIN', 'gstBuyerPAN', 'gstBuyerAddress', 'gstBuyerCity',
             'gstBuyerPhone', 'gstBuyerEmail', 'gstConsigneeCompany', 'gstConsigneeGSTIN', 'gstConsigneeAddress',
@@ -7068,7 +7195,8 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
             const consigneeState = document.getElementById('gstConsigneeState')?.value || '';
             const consigneeStateCode = document.getElementById('gstConsigneeStateCode')?.value || '';
             
-            // Invoice references
+            // Invoice references — getNextGstInvoiceNo() is just a preview; the
+            // server always assigns the real number on save.
             let invNum = EDIT_GST_BILL_ID ? EDIT_GST_BILL_ID : getNextGstInvoiceNo();
             const dueDate = document.getElementById('gstDueDate')?.value || '';
             const deliveryNote = document.getElementById('gstDeliveryNote')?.value?.trim() || '';
@@ -7229,9 +7357,10 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
                     logActivity('GST Bill Updated', `Updated GST Invoice <span class="font-mono font-bold" style="color:var(--primary)">${savedInvId}</span> for ${buyerCompany} · ₹ ${Math.round(grandTotalVal).toLocaleString('en-IN')}`);
                 } else {
                     // Save to database
+                    billObj.clientRequestId = gstBillClientRequestId;
                     const created = await saveBillToServer(billObj);
-                    // If the proposed number collided with a bill from another account, the
-                    // server assigns the next free one — reflect that in the confirmation UI.
+                    // The server always assigns the authoritative invoice number —
+                    // reflect that in the confirmation UI.
                     if (created && created.inv) invNum = created.inv;
 
                     // Deduct inventory (syncs the new quantities to the server internally)
@@ -7270,16 +7399,23 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
                     billObj._offline = true;
                     BILLS.push(billObj);
                     saveOfflineBill(billObj);
+                    // Only a failed create needs to be queued for retry (with its
+                    // provisional number swapped for the real one once it lands) —
+                    // a failed edit isn't a new bill and shouldn't be re-POSTed.
+                    if (!EDIT_GST_BILL_ID) {
+                        billObj.clientRequestId = gstBillClientRequestId;
+                        queueOutboxWrite('POST', '/bills', billObj);
+                    }
                     if (typeof window.deductInventoryFromBill === 'function') {
                         window.deductInventoryFromBill(items.map(i => ({ name: i.name, qty: i.qty })));
                     }
                     resetGstInvoiceForm();
-                    
+
                     openModal(`
                         <div class="font-serif text-2xl font-bold mb-1">Invoice Saved Offline (Server Unavailable)</div>
                         <div class="text-sm mb-5" style="color:var(--text-muted)">Saved locally. Syncing will resume when online.</div>
                         <div style="background:var(--surface-tint);border:1px solid var(--border);border-radius:14px;padding:18px;margin-bottom:20px">
-                            <div class="flex justify-between mb-2"><span style="color:var(--text-muted)">Invoice #</span><span class="font-mono font-bold" style="color:var(--primary)">${invNum}</span></div>
+                            <div class="flex justify-between mb-2"><span style="color:var(--text-muted)">Invoice # <span style="font-weight:400">(provisional, pending sync)</span></span><span class="font-mono font-bold" style="color:var(--primary)">${invNum}</span></div>
                             <div class="flex justify-between mb-2"><span style="color:var(--text-muted)">Buyer Company</span><span class="font-semibold">${buyerCompany}</span></div>
                             <div class="flex justify-between mt-3 pt-3 border-t" style="border-color:var(--border)"><span style="color:var(--text-muted)">Grand Total</span><span class="font-serif font-bold text-xl" style="color:var(--primary)">₹ ${grandTotalVal.toLocaleString('en-IN', {minimumFractionDigits:2})}</span></div>
                         </div>

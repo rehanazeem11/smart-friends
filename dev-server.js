@@ -154,7 +154,7 @@ const server = http.createServer(async (req, res) => {
         return;
     }
 
-    let filePath = path.join(__dirname, pathname === '/' ? 'friends_printing_mobile_new_1.html' : pathname);
+    let filePath = path.join(__dirname, 'public', pathname === '/' ? 'friends_printing_mobile_new_1.html' : pathname);
     fs.readFile(filePath, (err, content) => {
         if (err) {
             res.writeHead(404, { 'Content-Type': 'text/plain' });

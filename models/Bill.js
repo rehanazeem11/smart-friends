@@ -2,6 +2,9 @@ const mongoose = require('mongoose');
 
 const billSchema = new mongoose.Schema({
     inv: { type: String, required: true, unique: true },
+    // Lets a retried POST (flaky network, offline-outbox replay) return the
+    // already-created bill instead of creating a duplicate with a new number.
+    clientRequestId: { type: String, unique: true, sparse: true },
     date: String,
     customer: String,
     phone: String,
