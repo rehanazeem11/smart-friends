@@ -5,6 +5,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Smart Friends · Billing OS</title>
+    <script src="/config.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link
@@ -14,10 +15,16 @@
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="/styles.css">
 </head>
 
 <body class="role-admin logged-out">
+    <script>
+        (function () {
+            var isWeb = (window.SF_WEB_DOMAIN && location.hostname === window.SF_WEB_DOMAIN) || location.pathname.indexOf('/web') === 0;
+            if (isWeb) document.body.classList.add('web-mode');
+        })();
+    </script>
 
     <section class="page active login-page" id="page-login">
         <div class="login-container">
@@ -212,25 +219,25 @@
     <div class="mobile-drawer-overlay" id="mobileDrawerOverlay" onclick="closeMobileDrawer()"></div>
     <div class="mobile-more-drawer" id="mobileMoreDrawer">
         <div class="mobile-drawer-handle"></div>
-        <div class="mobile-drawer-item" onclick="goto('gst-billing');closeMobileDrawer()">
+        <div class="mobile-drawer-item" data-page="gst-billing" onclick="goto('gst-billing');closeMobileDrawer()">
             <i data-lucide="receipt"></i> GST Billing
         </div>
         <div class="mobile-drawer-item staff-hidden" onclick="goto('bills');closeMobileDrawer()">
             <i data-lucide="file-text"></i> Bills
         </div>
-        <div class="mobile-drawer-item staff-hidden" onclick="goto('expenses');closeMobileDrawer()">
+        <div class="mobile-drawer-item staff-hidden" data-page="expenses" onclick="goto('expenses');closeMobileDrawer()">
             <i data-lucide="credit-card"></i> Expenses
         </div>
-        <div class="mobile-drawer-item staff-hidden" onclick="goto('reports');closeMobileDrawer()">
+        <div class="mobile-drawer-item staff-hidden" data-page="reports" onclick="goto('reports');closeMobileDrawer()">
             <i data-lucide="bar-chart-3"></i> Reports
         </div>
-        <div class="mobile-drawer-item staff-hidden" onclick="goto('inventory');closeMobileDrawer()">
+        <div class="mobile-drawer-item staff-hidden" data-page="inventory" onclick="goto('inventory');closeMobileDrawer()">
             <i data-lucide="package"></i> Inventory
         </div>
-        <div class="mobile-drawer-item staff-hidden" onclick="goto('staff');closeMobileDrawer()">
+        <div class="mobile-drawer-item staff-hidden" data-page="staff" onclick="goto('staff');closeMobileDrawer()">
             <i data-lucide="user-cog"></i> Staff
         </div>
-        <div class="mobile-drawer-item staff-hidden" onclick="goto('settings');closeMobileDrawer()">
+        <div class="mobile-drawer-item staff-hidden" data-page="settings" onclick="goto('settings');closeMobileDrawer()">
             <i data-lucide="settings"></i> Settings
         </div>
         <div style="margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.08)">
@@ -324,7 +331,7 @@
             <div class="flex-1 overflow-y-auto min-h-0 p-8" style="background: var(--bg)">
 
                 <!-- ============ DASHBOARD ============ -->
-                <section class="page active" id="page-dashboard">
+                <section class="page active" id="page-dashboard" data-page="dashboard">
                     <div class="page-header">
                         <div>
                             <h1 class="page-title">Welcome back, <span id="greetName">Admin</span></h1>
@@ -765,7 +772,7 @@
                 </section>
 
                 <!-- ============ GST BILLING ============ -->
-                <section class="page" id="page-gst-billing">
+                <section class="page" id="page-gst-billing" data-page="gst-billing">
                     <div class="page-header">
                         <div>
                             <h1 class="page-title">GST Tax Billing</h1>
@@ -1250,7 +1257,7 @@
                 </section>
 
                 <!-- ============ EXPENSES ============ -->
-                <section class="page" id="page-expenses">
+                <section class="page" id="page-expenses" data-page="expenses">
                     <div class="page-header">
                         <div>
                             <h1 class="page-title">Expenses</h1>
@@ -1530,7 +1537,7 @@
                 </section>
 
                 <!-- ============ REPORTS ============ -->
-                <section class="page" id="page-reports">
+                <section class="page" id="page-reports" data-page="reports">
                     <div class="page-header">
                         <div>
                             <h1 class="page-title">Reports & Analytics</h1>
@@ -1909,7 +1916,7 @@
                 </section>
 
                 <!-- ============ INVENTORY ============ -->
-                <section class="page" id="page-inventory">
+                <section class="page" id="page-inventory" data-page="inventory">
                     <div class="page-header">
                         <div>
                             <h1 class="page-title">Inventory Management</h1>
@@ -1992,7 +1999,7 @@
                 </section>
 
                 <!-- ============ STAFF ============ -->
-                <section class="page" id="page-staff">
+                <section class="page" id="page-staff" data-page="staff">
                     <div class="page-header">
                         <div>
                             <h1 class="page-title">Staff Management</h1>
@@ -2071,7 +2078,7 @@
                 </section>
 
                 <!-- ============ SETTINGS ============ -->
-                <section class="page" id="page-settings">
+                <section class="page" id="page-settings" data-page="settings">
                     <div class="page-header">
                         <div>
                             <h1 class="page-title">Settings</h1>
@@ -2398,7 +2405,8 @@ Bangalore — 560038</textarea>
         style="display:none;position:fixed;bottom:28px;right:28px;z-index:2000;background:var(--brand-bg);color:white;padding:14px 22px;border-radius:14px;font-size:14px;font-weight:600;box-shadow:0 8px 24px rgba(0,0,0,0.2);align-items:center;gap:10px;opacity:0;transition:opacity 0.25s">
     </div>
 
-    <script src="app.js?v=4"></script>
+    <script src="/shared/billing.js?v=1"></script>
+    <script src="/app.js?v=6"></script>
 </body>
 
 </html>

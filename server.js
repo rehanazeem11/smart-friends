@@ -39,9 +39,21 @@ app.use(cookieParser());
 // Serve frontend files (public/ only — never the server code or models)
 app.use(express.static(path.join(__dirname, 'public')));
 
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'friends_printing_mobile_new_1.html'));
+// Tells the page which hostname counts as "the website" so it can add the
+// web-mode class client-side (see the inline detector at the top of
+// friends_printing_mobile_new_1.html's <body>). Not under /api — must be
+// reachable before login.
+app.get('/config.js', (req, res) => {
+    res.type('application/javascript').send(`window.SF_WEB_DOMAIN = ${JSON.stringify(process.env.WEB_DOMAIN || '')};`);
 });
+
+// Web mode is just the same app HTML with fewer pages shown (CSS + a
+// web-mode class), so both routes serve the identical file — no separate
+// frontend to maintain. GET /web exists purely so web mode can be reached
+// locally without a WEB_DOMAIN hostname match.
+const APP_HTML = path.join(__dirname, 'public', 'friends_printing_mobile_new_1.html');
+app.get('/', (req, res) => res.sendFile(APP_HTML));
+app.get('/web', (req, res) => res.sendFile(APP_HTML));
 
 // ============ AUTH ============
 const BCRYPT_RE = /^\$2[aby]\$\d{2}\$/;
@@ -165,6 +177,24 @@ async function seedCounters() {
     }
 }
 
+// After deleting a bill, rolls its series' counter back by one — but only if
+// this was the latest number issued (seq still equals this bill's number).
+// That equality check makes it safe under concurrency: if another bill was
+// created in that series since, seq has already moved on and this simply
+// matches nothing, leaving the counter alone. Deleting several bills
+// newest-first rolls each one back in turn; deleting from the middle never
+// touches the counter.
+async function maybeRollbackCounter(inv) {
+    for (const series of Object.keys(SERIES_PATTERNS)) {
+        const m = SERIES_PATTERNS[series].exec(inv || '');
+        if (!m) continue;
+        const num = parseInt(m[1], 10);
+        if (isNaN(num)) return;
+        await Counter.findOneAndUpdate({ _id: series, seq: num }, { $inc: { seq: -1 } });
+        return;
+    }
+}
+
 // ============ BILLS ============
 app.get('/api/bills', async (req, res) => {
     try {
@@ -222,7 +252,8 @@ app.put('/api/bills/:inv', async (req, res) => {
 
 app.delete('/api/bills/:inv', requireAdmin, async (req, res) => {
     try {
-        await Bill.findOneAndDelete({ inv: req.params.inv });
+        const deleted = await Bill.findOneAndDelete({ inv: req.params.inv });
+        if (deleted) await maybeRollbackCounter(deleted.inv);
         res.json({ ok: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -268,6 +299,94 @@ app.delete('/api/customers/:id', async (req, res) => {
             });
         }
         res.json({ ok: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ============ V2 API (website: paginated / filtered / list-shaped) ============
+// Additive only — GET /api/bills and GET /api/customers above still return
+// full unpaginated arrays exactly as before, because the desktop app depends
+// on that shape.
+const BILL_LIST_FIELDS = 'inv date customer phone type total paid status createdBy updatedAt';
+
+function escapeRegex(s) {
+    return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+app.get('/api/v2/bills', async (req, res) => {
+    try {
+        const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+        const limit = Math.min(200, Math.max(1, parseInt(req.query.limit, 10) || 50));
+        const filter = {};
+        const q = (req.query.q || '').trim();
+        if (q) {
+            const escaped = escapeRegex(q);
+            filter.$or = [
+                { inv: { $regex: escaped, $options: 'i' } },
+                { customer: { $regex: escaped, $options: 'i' } }
+            ];
+        }
+        if (req.query.type) filter.type = req.query.type;
+        if (req.query.status) filter.status = req.query.status;
+        if (req.query.from || req.query.to) {
+            filter.date = {};
+            if (req.query.from) filter.date.$gte = req.query.from;
+            if (req.query.to) filter.date.$lte = req.query.to;
+        }
+
+        // createdAt is a display string ("24 Sep · 07:12 PM"), not sortable —
+        // _id encodes insertion order (and time) reliably instead.
+        const [items, total] = await Promise.all([
+            Bill.find(filter, BILL_LIST_FIELDS).sort({ _id: -1 }).skip((page - 1) * limit).limit(limit).lean(),
+            Bill.countDocuments(filter)
+        ]);
+        res.json({ items, total });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/v2/bills/:inv', async (req, res) => {
+    try {
+        const bill = await Bill.findOne({ inv: req.params.inv }).lean();
+        if (!bill) return res.status(404).json({ error: 'Bill not found' });
+        res.json(bill);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/v2/customers', async (req, res) => {
+    try {
+        const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+        const limit = Math.min(200, Math.max(1, parseInt(req.query.limit, 10) || 50));
+        const filter = {};
+        const q = (req.query.q || '').trim();
+        if (q) {
+            const escaped = escapeRegex(q);
+            filter.$or = [
+                { name: { $regex: escaped, $options: 'i' } },
+                { phone: { $regex: escaped, $options: 'i' } }
+            ];
+        }
+
+        const [items, total] = await Promise.all([
+            Customer.find(filter).sort({ name: 1 }).skip((page - 1) * limit).limit(limit).lean(),
+            Customer.countDocuments(filter)
+        ]);
+        res.json({ items, total });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/v2/customers/:id', async (req, res) => {
+    try {
+        const id = req.params.id;
+        let customer = mongoose.Types.ObjectId.isValid(id) ? await Customer.findById(id).lean() : null;
+        if (!customer) {
+            customer = await Customer.findOne({ $or: [{ name: id }, { phone: id }] }).lean();
+        }
+        if (!customer) return res.status(404).json({ error: 'Customer not found' });
+
+        const [bills, payments] = await Promise.all([
+            Bill.find({ customer: customer.name }, BILL_LIST_FIELDS).sort({ _id: -1 }).lean(),
+            Payment.find({ customerName: customer.name }).sort({ date: 1, createdAt: 1 }).lean()
+        ]);
+        res.json({ ...customer, bills, payments });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

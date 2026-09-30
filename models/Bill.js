@@ -27,6 +27,10 @@ const billSchema = new mongoose.Schema({
         report_type_override: { type: String, default: 'auto' }
     }],
     subtotal: Number,
+    // Flat rupee discount applied before GST (normal/POS bills) — what
+    // computeBillTotals()/buildBill() call `discount`. Only persisted going
+    // forward; bills created before this field existed have no value here.
+    discountAmount: Number,
     gst: Number,
     gstPercent: Number,
     total: Number,
@@ -81,5 +85,10 @@ const billSchema = new mongoose.Schema({
     // Report Type Override field
     report_type_override: { type: String, default: 'auto' }
 }, { timestamps: true });
+
+// Used by the website's /api/v2/bills (customer lookups on a customer's
+// profile page) and (type, _id) filtered/paginated listings.
+billSchema.index({ customer: 1 });
+billSchema.index({ type: 1, _id: -1 });
 
 module.exports = mongoose.model('Bill', billSchema);

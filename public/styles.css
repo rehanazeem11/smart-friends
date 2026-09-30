@@ -1077,6 +1077,27 @@
             display: none;
         }
 
+        /* ============ WEB MODE ============
+           The website is the same app with fewer pages: only new-bill (POS),
+           bills, customers and customer-profile exist. Everything else —
+           its nav entries (sidebar, mobile bottom nav, mobile drawer) and its
+           page section — is hidden by matching data-page. */
+        body.web-mode [data-page="dashboard"],
+        body.web-mode [data-page="gst-billing"],
+        body.web-mode [data-page="staff"],
+        body.web-mode [data-page="expenses"],
+        body.web-mode [data-page="inventory"],
+        body.web-mode [data-page="reports"],
+        body.web-mode [data-page="settings"] {
+            display: none !important;
+        }
+
+        /* GST bills can still be viewed/printed/PDF'd in web mode, just not
+           edited there — edit GST bills in the desktop app. */
+        body.web-mode tr[data-type="GST"] button[title="Edit bill"] {
+            display: none !important;
+        }
+
         /* Job type toggle */
         .job-toggle {
             display: flex;
