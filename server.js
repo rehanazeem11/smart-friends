@@ -568,16 +568,23 @@ app.put('/api/settings/:key', async (req, res) => {
 // ============ CONNECT & START ============
 const PORT = process.env.PORT || 5000;
 
+// Connect to MongoDB and (outside Vercel) start the HTTP server.
+// On Vercel the platform calls the exported `app` directly as a serverless
+// function — no listen() needed (and calling it would cause a timeout).
 mongoose.connect(process.env.MONGODB_URI)
     .then(async () => {
         console.log('Connected to MongoDB Atlas');
         await seedCounters();
-        app.listen(PORT, () => {
-            console.log(`Server running at http://localhost:${PORT}`);
-        });
+        if (!process.env.VERCEL) {
+            app.listen(PORT, () => {
+                console.log(`Server running at http://localhost:${PORT}`);
+            });
+        }
     })
     .catch(err => {
         console.error('MongoDB connection failed:', err.message);
         console.error('Check your MONGODB_URI in .env file');
         process.exit(1);
     });
+
+module.exports = app;
