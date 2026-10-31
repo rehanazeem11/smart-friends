@@ -644,13 +644,13 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
         } else if (cat === 'print_only_ss') {
             panel.innerHTML = `
                 <div class="text-[11px] mb-2" style="color:var(--text-muted)">
-                    <strong>Print Only One Side</strong> — ₹5 per sheet
+                    <strong>Print Only One Side</strong> — ₹${PRICING_DB.printOnly.ss.rate} per sheet
                 </div>
             `;
         } else if (cat === 'print_only_fb') {
             panel.innerHTML = `
                 <div class="text-[11px] mb-2" style="color:var(--text-muted)">
-                    <strong>Print Only Front &amp; Back</strong> — ₹10 per sheet
+                    <strong>Print Only Front &amp; Back</strong> — ₹${PRICING_DB.printOnly.fb.rate} per sheet
                 </div>
             `;
         }
@@ -662,8 +662,8 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
         const panel = row.querySelector('.li-config-panel');
         if (!panel) return;
         panel.querySelectorAll('select, input').forEach(el => {
-            el.addEventListener('change', () => updateRowPricing(row, cat));
-            el.addEventListener('input', () => updateRowPricing(row, cat));
+            el.addEventListener('change', () => { delete row.dataset.keepPrice; updateRowPricing(row, cat); });
+            el.addEventListener('input', () => { delete row.dataset.keepPrice; updateRowPricing(row, cat); });
         });
     }
 
@@ -763,12 +763,12 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
         } else if (cat === 'print_only_ss') {
             descriptionText = 'Print Only One Side';
             unitText = 'sheet';
-            totalCost += qty * 5;
+            totalCost += qty * PRICING_DB.printOnly.ss.rate;
 
         } else if (cat === 'print_only_fb') {
             descriptionText = 'Print Only Front & Back';
             unitText = 'sheet';
-            totalCost += qty * 10;
+            totalCost += qty * PRICING_DB.printOnly.fb.rate;
         }
 
         if (nameEl) nameEl.value = descriptionText;
@@ -955,7 +955,8 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
         if (qtyEl) {
             qtyEl.addEventListener('input', () => {
                 const cat = row.querySelector('.li-category')?.value || '';
-                if (cat) {
+                // Rows loaded from a saved bill keep their original rate on qty edits
+                if (cat && !row.dataset.keepPrice) {
                     updateRowPricing(row, cat);
                 }
                 recalcRow(row);
@@ -981,6 +982,7 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
         });
         if (catEl) {
             catEl.addEventListener('change', () => {
+                delete row.dataset.keepPrice;
                 const newCat = catEl.value;
                 showRowConfigPanel(row, newCat);
                 if (newCat) {
@@ -1164,6 +1166,44 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
         return window.SFBilling.calculateBillSheetCount(items);
     }
 
+    /**
+     * Reads the bill's line items from the form. recalcSummary() counts every
+     * row in the total, so a row with an amount but no description must not be
+     * silently dropped (the saved/printed bill would then miss that item while
+     * still charging for it). Returns null and warns if such a row exists.
+     */
+    function readLineItemsFromDOM() {
+        const items = [];
+        let blankRowNo = 0;
+        document.querySelectorAll('#lineItemsContainer .li-row').forEach((row, idx) => {
+            const name = row.querySelector('.li-name')?.value?.trim() || '';
+            const qty = parseFloat(row.querySelector('.li-qty')?.value) || 0;
+            const price = parseFloat(row.querySelector('.li-price')?.value) || 0;
+            const unit = row.querySelector('.li-unit')?.value || '';
+            const amountText = row.querySelector('.li-amount')?.textContent || '';
+            const amount = parseFloat(amountText.replace(/[^0-9.-]+/g,'')) || (qty * price);
+            const overrideVal = row.querySelector('.li-report-override')?.value || 'auto';
+            if (name) {
+                items.push({
+                    name,
+                    qty,
+                    price,
+                    unit,
+                    amount,
+                    report_type_override: overrideVal,
+                    reportTypeOverride: overrideVal
+                });
+            } else if (amount > 0 && !blankRowNo) {
+                blankRowNo = idx + 1;
+            }
+        });
+        if (blankRowNo) {
+            toast(`Item ${blankRowNo} has an amount but no description — add one or delete the row`, 'alert-circle');
+            return null;
+        }
+        return items;
+    }
+
     /** Reads line items from the DOM and calculates sheet count */
     function calculateSheetCountFromDOM() {
         var items = [];
@@ -1199,27 +1239,8 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
             const clientRequestId = newBillClientRequestId;
 
 
-            const items = [];
-            document.querySelectorAll('#lineItemsContainer .li-row').forEach(row => {
-                const name = row.querySelector('.li-name')?.value?.trim() || '';
-                const qty = parseFloat(row.querySelector('.li-qty')?.value) || 0;
-                const price = parseFloat(row.querySelector('.li-price')?.value) || 0;
-                const unit = row.querySelector('.li-unit')?.value || '';
-                const amountText = row.querySelector('.li-amount')?.textContent || '';
-                const amount = parseFloat(amountText.replace(/[^0-9.-]+/g,'')) || (qty * price);
-                const overrideVal = row.querySelector('.li-report-override')?.value || 'auto';
-                if (name) {
-                    items.push({
-                        name,
-                        qty,
-                        price,
-                        unit,
-                        amount,
-                        report_type_override: overrideVal,
-                        reportTypeOverride: overrideVal
-                    });
-                }
-            });
+            const items = readLineItemsFromDOM();
+            if (!items) return;
 
             const subtotal = parseFloat((document.getElementById('previewSubtotal')?.textContent || '').replace(/[^0-9.-]+/g,'')) || 0;
             const discount = parseFloat(document.getElementById('discountInput')?.value) || 0;
@@ -3348,6 +3369,7 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
                         item.unit  || '',
                         item.report_type_override || item.reportTypeOverride || 'auto'
                     );
+                    if (item.name) row.dataset.keepPrice = '1';
                     container.appendChild(row);
                 });
                 updateLineItemNumbers();
@@ -3387,27 +3409,8 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
         const originalBill = BILLS[originalBillIdx];
 
         // Read all line items
-        const items = [];
-        document.querySelectorAll('#lineItemsContainer .li-row').forEach(row => {
-            const name = row.querySelector('.li-name')?.value?.trim() || '';
-            const qty = parseFloat(row.querySelector('.li-qty')?.value) || 0;
-            const price = parseFloat(row.querySelector('.li-price')?.value) || 0;
-            const unit = row.querySelector('.li-unit')?.value || '';
-            const amountText = row.querySelector('.li-amount')?.textContent || '';
-            const amount = parseFloat(amountText.replace(/[^0-9.-]+/g,'')) || (qty * price);
-            const overrideVal = row.querySelector('.li-report-override')?.value || 'auto';
-            if (name) {
-                items.push({
-                    name,
-                    qty,
-                    price,
-                    unit,
-                    amount,
-                    report_type_override: overrideVal,
-                    reportTypeOverride: overrideVal
-                });
-            }
-        });
+        const items = readLineItemsFromDOM();
+        if (!items) return;
 
         const subtotal = parseFloat((document.getElementById('previewSubtotal')?.textContent || '').replace(/[^0-9.-]+/g,'')) || 0;
         const gstPercent = parseFloat(document.getElementById('gstInput')?.value) || 0;
@@ -3556,6 +3559,7 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
         // Load settings and inventory data
         if (typeof loadShortcutItems === 'function') await loadShortcutItems();
         if (typeof loadDropdownSettings === 'function') await loadDropdownSettings();
+        if (typeof loadPricingSettings === 'function') await loadPricingSettings();
         if (typeof updateGstUnitsDatalist === 'function') updateGstUnitsDatalist();
         if (typeof loadInventoryData === 'function') loadInventoryData();
         if (typeof renderDashboardRecentBills === 'function') renderDashboardRecentBills(); if (typeof updateDashboardStats === 'function') updateDashboardStats();
@@ -3659,7 +3663,7 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
                 // Same web-mode skip as loadServerData: no staff/expenses/
                 // inventory/reports pages exist there, so don't poll them.
                 const webMode = isWebMode();
-                const [bills, customers, staff, expenses, inventory, activity, storeSettings, payments] = await Promise.all([
+                const [bills, customers, staff, expenses, inventory, activity, storeSettings, payments, pricing] = await Promise.all([
                     apiGet('/bills', billsTimeout).catch(() => null),
                     apiGet('/customers', syncTimeout).catch(() => null),
                     webMode ? Promise.resolve(null) : apiGet('/staff', syncTimeout).catch(() => null),
@@ -3667,7 +3671,8 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
                     webMode ? Promise.resolve(null) : apiGet('/inventory', syncTimeout).catch(() => null),
                     webMode ? Promise.resolve(null) : apiGet('/activity', syncTimeout).catch(() => null),
                     apiGet('/settings/store_settings', syncTimeout).catch(() => null),
-                    apiGet('/payments', syncTimeout).catch(() => null)
+                    apiGet('/payments', syncTimeout).catch(() => null),
+                    apiGet('/settings/pricing_db', syncTimeout).catch(() => null)
                 ]);
 
                 const serverOk = Array.isArray(bills) || Array.isArray(customers);
@@ -3680,6 +3685,8 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
                 }
 
                 if (serverOk) {
+                    // Admin price edits reach every open device without a reload
+                    if (pricing && typeof window.applyPricingSettings === 'function') window.applyPricingSettings(pricing);
                     const currentHash = JSON.stringify({
                         bills: (bills || []).map(b => ({ inv: b.inv, updated: b.updatedAt || b.lastUpdatedAt || '' })),
                         customers: (customers || []).map(c => ({ id: c._id || c.id, updated: c.updatedAt || '' })),
@@ -3840,7 +3847,7 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
                 settingsTabs.querySelectorAll('button').forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
                 const key = btn.dataset.settingsTab;
-                ['store','rates','invoice','dropdowns'].forEach(k => {
+                ['store','rates','invoice','dropdowns','pricing'].forEach(k => {
                     const panel = document.getElementById('settings-panel-' + k);
                     if (panel) panel.style.display = (k === key) ? '' : 'none';
                 });
@@ -3848,6 +3855,7 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
                     if (typeof renderSettingsShortcuts === 'function') renderSettingsShortcuts();
                     if (typeof renderSettingsDropdownLists === 'function') renderSettingsDropdownLists();
                 }
+                if (key === 'pricing' && typeof renderPricingSettings === 'function') renderPricingSettings();
             });
         });
     }
@@ -5288,7 +5296,7 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
             types: [
                 { key: 'pvc',         label: 'PVC',                rate: 22 },
                 { key: 'normal',      label: 'Normal Sticker',     rate: 9 },
-                { key: 'thick',       label: 'Thick Sticker',      rate: 20 },
+                { key: 'thick',       label: 'Thick Sticker',      rate: 12 },
                 { key: 'transparent', label: 'Transparent Sticker',rate: 18 },
             ]
         },
@@ -5302,14 +5310,137 @@ const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAADDCAYAA
             ]
         },
         lamination: {
-            gloss: { perSheetOS: 2, perSheetFB: 4, min: 150 },
-            matte: { perSheetOS: 3, perSheetFB: 5, min: 150 },
+            gloss: { label: 'Gloss', perSheetOS: 2, perSheetFB: 4, min: 150 },
+            matte: { label: 'Matte', perSheetOS: 3, perSheetFB: 5, min: 150 },
         },
         cutting: {
-            normal:     { perUnit: 1,  min: 50  },
-            half:       { perUnit: 2,  min: 100 },
-            full_shape: { perUnit: 5,  min: 200 },
+            normal:     { label: 'Normal',     perUnit: 1,  min: 50  },
+            half:       { label: 'Half',       perUnit: 2,  min: 100 },
+            full_shape: { label: 'Full Shape', perUnit: 5,  min: 200 },
         },
+        printOnly: {
+            ss: { label: 'One Side',     rate: 5  },
+            fb: { label: 'Front & Back', rate: 10 },
+        },
+    };
+
+    /* ============================================================
+       ITEM PRICES (Settings > Item Prices, admin only)
+       The code above holds the default rates; admin edits are stored in
+       settings key 'pricing_db' and copied over them. Only numeric price
+       fields are taken from the stored copy — keys/labels always come from
+       code. Bills store their own price per line item, so changing rates
+       never alters an existing bill.
+    ============================================================ */
+    const PRICING_SECTIONS = [
+        { cat: 'paper',      title: 'Sheet',      fields: [['os', 'One Side (₹/sheet)'], ['fb', 'Both Sides (₹/sheet)']] },
+        { cat: 'sticker',    title: 'Sticker',    fields: [['rate', '₹ / sheet']] },
+        { cat: 'flex',       title: 'Flex',       fields: [['rate', '₹ / sqft']] },
+        { cat: 'lamination', title: 'Lamination', fields: [['perSheetOS', 'One Side (₹/sheet)'], ['perSheetFB', 'Both Sides (₹/sheet)'], ['min', 'Minimum charge (₹)']] },
+        { cat: 'cutting',    title: 'Cutting',    fields: [['perUnit', '₹ / unit'], ['min', 'Minimum charge (₹)']] },
+        { cat: 'printOnly',  title: 'Print Only', fields: [['rate', '₹ / sheet']] },
+    ];
+
+    // Sub-items of a category, in display order (types array or keyed object).
+    function pricingEntries(cat) {
+        const c = PRICING_DB[cat];
+        return c.types || Object.values(c);
+    }
+
+    window.applyPricingSettings = function(stored) {
+        if (!stored || typeof stored !== 'object') return;
+        PRICING_SECTIONS.forEach(({ cat, fields }) => {
+            const src = stored[cat];
+            if (!src) return;
+            const dst = PRICING_DB[cat];
+            const pairs = dst.types
+                ? dst.types.map(t => [t, (src.types || []).find(s => s && s.key === t.key)])
+                : Object.keys(dst).map(k => [dst[k], src[k]]);
+            pairs.forEach(([d, s]) => {
+                if (!s) return;
+                fields.forEach(([f]) => {
+                    const v = Number(s[f]);
+                    if (s[f] !== null && s[f] !== '' && isFinite(v) && v >= 0) d[f] = v;
+                });
+            });
+        });
+    };
+
+    window.loadPricingSettings = async function() {
+        try {
+            const remote = await apiGet('/settings/pricing_db');
+            if (remote && typeof remote === 'object') {
+                window.applyPricingSettings(remote);
+                localStorage.setItem('fp_pricing_db', JSON.stringify(PRICING_DB));
+                return;
+            }
+        } catch (e) {
+            // fall through to localStorage
+        }
+        try { window.applyPricingSettings(JSON.parse(localStorage.getItem('fp_pricing_db') || 'null')); } catch (e) {}
+    };
+
+    window.renderPricingSettings = function(editable) {
+        const list = document.getElementById('pricing-list');
+        if (!list) return;
+        const dis = editable ? '' : 'disabled';
+        list.innerHTML = PRICING_SECTIONS.map(({ cat, title, fields }) => `
+            <div>
+                <div class="section-title">${title}</div>
+                <table class="data-table w-full">
+                    <thead><tr><th>Specification</th>${fields.map(([, label]) => `<th class="text-right">${label}</th>`).join('')}</tr></thead>
+                    <tbody>
+                        ${pricingEntries(cat).map((e, idx) => `<tr>
+                            <td class="font-medium">${e.label}</td>
+                            ${fields.map(([f]) => `<td class="text-right"><input class="input tabular text-right pricing-input" style="width:110px;display:inline-block" type="number" min="0" step="0.01" data-cat="${cat}" data-idx="${idx}" data-field="${f}" value="${e[f]}" ${dis} /></td>`).join('')}
+                        </tr>`).join('')}
+                    </tbody>
+                </table>
+            </div>`).join('');
+        document.getElementById('pricing-edit-btn').style.display = editable ? 'none' : '';
+        document.getElementById('pricing-cancel-btn').style.display = editable ? '' : 'none';
+        document.getElementById('pricing-save-btn').style.display = editable ? '' : 'none';
+    };
+
+    window.startPricingEdit = function() {
+        openModal(`
+            <div class="font-serif text-2xl font-bold mb-1" style="color:var(--rose-text)">Edit item prices?</div>
+            <div class="text-sm mb-4" style="color:var(--text-muted)">
+                New prices will be used for <strong>every new bill</strong>, by all staff, as soon as you save.<br><br>
+                Existing bills will <strong>not</strong> change — they keep the prices they were created with.<br><br>
+                Double-check each number before saving.
+            </div>
+            <div class="flex gap-2">
+                <button class="btn btn-secondary flex-1" onclick="document.getElementById('modalOverlay').style.display='none'">Cancel</button>
+                <button class="btn btn-primary flex-1" onclick="document.getElementById('modalOverlay').style.display='none';renderPricingSettings(true)">I understand, edit prices</button>
+            </div>`);
+    };
+
+    window.savePricingSettings = function() {
+        const inputs = document.querySelectorAll('#pricing-list .pricing-input');
+        for (const inp of inputs) {
+            const v = inp.value.trim();
+            if (v === '' || !isFinite(Number(v)) || Number(v) < 0) {
+                inp.focus();
+                toast('Every price must be a number of 0 or more', 'alert-circle');
+                return;
+            }
+        }
+        const changes = [];
+        inputs.forEach(inp => {
+            const entry = pricingEntries(inp.dataset.cat)[inp.dataset.idx];
+            const v = Number(inp.value);
+            if (entry[inp.dataset.field] !== v) {
+                changes.push(`${entry.label} ${entry[inp.dataset.field]}→${v}`);
+                entry[inp.dataset.field] = v;
+            }
+        });
+        renderPricingSettings();
+        if (!changes.length) { toast('No price changes', 'check-circle'); return; }
+        localStorage.setItem('fp_pricing_db', JSON.stringify(PRICING_DB));
+        syncWrite('PUT', '/settings/pricing_db', { value: PRICING_DB });
+        logActivity('Prices Updated', changes.join(', '));
+        toast('Prices saved — new bills will use them', 'check-circle');
     };
 
     /* Dynamic Inline Calculator Event Hooks completed */

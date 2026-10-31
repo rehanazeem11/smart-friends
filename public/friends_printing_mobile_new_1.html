@@ -2093,6 +2093,33 @@
                             Settings</button>
                         <button data-settings-tab="dropdowns"><i data-lucide="list" class="w-3.5 h-3.5"></i> Dropdowns
                             &amp; Keys</button>
+                        <button class="admin-only-view" data-settings-tab="pricing"><i data-lucide="indian-rupee" class="w-3.5 h-3.5"></i> Item
+                            Prices</button>
+                    </div>
+
+                    <!-- Item Prices Panel (admin only) -->
+                    <div id="settings-panel-pricing" style="display:none">
+                        <div class="card">
+                            <div class="flex items-center justify-between mb-4 pb-3"
+                                style="border-bottom: 1px solid var(--border)">
+                                <div>
+                                    <div class="font-serif text-lg font-bold">Item Prices</div>
+                                    <div class="text-xs" style="color:var(--text-muted)">Rates used when billing each
+                                        item. Changes apply to new bills only — existing bills keep their prices.</div>
+                                </div>
+                                <div class="flex gap-2">
+                                    <button class="btn btn-secondary text-sm" id="pricing-edit-btn"
+                                        onclick="startPricingEdit()"><i data-lucide="pencil" class="w-4 h-4"></i> Edit
+                                        Prices</button>
+                                    <button class="btn btn-secondary text-sm" id="pricing-cancel-btn" style="display:none"
+                                        onclick="renderPricingSettings()">Cancel</button>
+                                    <button class="btn btn-primary text-sm" id="pricing-save-btn" style="display:none"
+                                        onclick="savePricingSettings()"><i data-lucide="save" class="w-4 h-4"></i> Save
+                                        Prices</button>
+                                </div>
+                            </div>
+                            <div id="pricing-list" class="space-y-6"></div>
+                        </div>
                     </div>
 
                     <!-- Store Details Panel -->

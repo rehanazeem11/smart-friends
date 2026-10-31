@@ -555,6 +555,9 @@ app.get('/api/settings/:key', async (req, res) => {
 });
 
 app.put('/api/settings/:key', async (req, res) => {
+    if (req.params.key === 'pricing_db' && req.user.role !== 'admin') {
+        return res.status(403).json({ error: 'Admin access required' });
+    }
     try {
         const doc = await Settings.findOneAndUpdate(
             { key: req.params.key },
